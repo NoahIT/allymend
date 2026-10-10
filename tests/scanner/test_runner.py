@@ -1,3 +1,4 @@
+import logging
 import socket
 from collections.abc import Callable
 from pathlib import Path
@@ -79,6 +80,22 @@ def test_scan_urls_scans_each_page_once_in_order(
     assert [page.page for page in pages] == [shop, home]
     assert [o.rule_id for o in pages[0].occurrences] == ["image-alt"]
     assert pages[1].occurrences == ()
+
+
+def test_logs_each_page_and_each_failure(
+    tmp_path: Path, write_page: Callable[..., Path], caplog: pytest.LogCaptureFixture
+) -> None:
+    write_page("index.html")
+    caplog.set_level(logging.INFO, logger="pataisa")
+    with serve(tmp_path) as base_url:
+        home, missing = f"{base_url}index.html", f"{base_url}missing.html"
+        scan_urls([home, missing])
+    runner = "pataisa.scanner.runner"
+    assert caplog.record_tuples == [
+        (runner, logging.INFO, f"scanning 1 of 2: {home}"),
+        (runner, logging.INFO, f"scanning 2 of 2: {missing}"),
+        (runner, logging.WARNING, f"could not scan {missing}: HTTP 404"),
+    ]
 
 
 def test_scan_url_reports_http_errors(tmp_path: Path) -> None:

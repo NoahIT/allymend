@@ -56,7 +56,10 @@ def test_writes_json_to_a_file(
     [page] = document["pages"]
     assert page["page"] == "index.html"
     assert [o["rule_id"] for o in page["occurrences"]] == ["html-has-lang"]
-    assert capsys.readouterr().err == f"pataisa: wrote {report}\n"
+    assert capsys.readouterr().err.splitlines() == [
+        "pataisa: scanning 1 of 1: index.html",
+        f"pataisa: wrote {report}",
+    ]
 
 
 def test_writes_markdown(
@@ -105,6 +108,24 @@ def test_page_that_cannot_be_scanned_exits_with_2(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     with serve(tmp_path) as base_url:
-        code = main(["scan", f"{base_url}missing.html"])
+        url = f"{base_url}missing.html"
+        code = main(["scan", url])
     assert code == EXIT_ERROR
-    assert f"{base_url}missing.html: could not be scanned (HTTP 404)" in capsys.readouterr().out
+    captured = capsys.readouterr()
+    assert f"{url}: could not be scanned (HTTP 404)" in captured.out
+    assert captured.err.splitlines() == [
+        f"pataisa: scanning 1 of 1: {url}",
+        f"pataisa: could not scan {url}: HTTP 404",
+    ]
+
+
+def test_quiet_shows_only_warnings(
+    tmp_path: Path, write_page: Callable[..., Path], capsys: pytest.CaptureFixture[str]
+) -> None:
+    write_page("index.html")
+    report = tmp_path / "report.md"
+    with serve(tmp_path) as base_url:
+        missing = f"{base_url}missing.html"
+        code = main(["scan", f"{base_url}index.html", missing, "--quiet", "--output", str(report)])
+    assert code == EXIT_ERROR
+    assert capsys.readouterr().err == f"pataisa: could not scan {missing}: HTTP 404\n"

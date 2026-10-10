@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import argparse
+import logging
 import sys
+from contextlib import contextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING, override
 
@@ -12,7 +14,7 @@ from pataisa.mapper import map_sources
 from pataisa.scanner import ScanOptions, scan_directory, scan_urls
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Iterator, Sequence
 
     from pataisa.core.models import ScanResult
 
@@ -25,14 +27,16 @@ def main(argv: Sequence[str] | None = None) -> int:
     """Run the pataisa command line and return its exit code.
 
     The exit code is 0 when no problems were found, 1 when problems were found, and 2 when
-    pataisa could not run or a page could not be scanned.
+    pataisa could not run or a page could not be scanned. Progress, warnings and errors go to
+    standard error.
     """
     args = _parser().parse_args(argv)
-    try:
-        result = _scan(args.targets, ScanOptions(timeout_ms=round(args.timeout * 1000)))
-    except PataisaError as error:
-        sys.stderr.write(f"pataisa: {error}\n")
-        return EXIT_ERROR
+    with _log_to_stderr(quiet=args.quiet):
+        try:
+            result = _scan(args.targets, ScanOptions(timeout_ms=round(args.timeout * 1000)))
+        except PataisaError as error:
+            sys.stderr.write(f"pataisa: {error}\n")
+            return EXIT_ERROR
 
     if args.format == "json":
         report = render_json(result, include_markup=args.include_markup)
@@ -44,8 +48,24 @@ def main(argv: Sequence[str] | None = None) -> int:
         sys.stdout.write(report)
     else:
         args.output.write_text(report, encoding="utf-8", newline="\n")
-        sys.stderr.write(f"pataisa: wrote {args.output}\n")
+        if not args.quiet:
+            sys.stderr.write(f"pataisa: wrote {args.output}\n")
     return _exit_code(result)
+
+
+@contextmanager
+def _log_to_stderr(*, quiet: bool) -> Iterator[None]:
+    package = logging.getLogger("pataisa")
+    handler = logging.StreamHandler(sys.stderr)
+    handler.setFormatter(logging.Formatter("pataisa: %(message)s"))
+    level = package.level
+    package.setLevel(logging.WARNING if quiet else logging.INFO)
+    package.addHandler(handler)
+    try:
+        yield
+    finally:
+        package.removeHandler(handler)
+        package.setLevel(level)
 
 
 def _scan(targets: Sequence[str], options: ScanOptions) -> ScanResult:
@@ -125,5 +145,8 @@ def _parser() -> argparse.ArgumentParser:
         default=30.0,
         metavar="SECONDS",
         help="how long to wait for each page to load, and again for it to be checked (default: 30)",
+    )
+    scan.add_argument(
+        "-q", "--quiet", action="store_true", help="show only warnings and errors, not progress"
     )
     return parser

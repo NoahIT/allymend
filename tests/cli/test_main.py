@@ -1,3 +1,4 @@
+import logging
 from pathlib import Path
 
 import pytest
@@ -72,3 +73,10 @@ def test_reports_a_folder_without_html_files(
 ) -> None:
     assert main(["scan", str(tmp_path)]) == EXIT_ERROR
     assert "no HTML files found" in capsys.readouterr().err
+
+
+def test_leaves_logging_as_it_was(tmp_path: Path) -> None:
+    package = logging.getLogger("pataisa")
+    before = (package.level, list(package.handlers))
+    main(["scan", str(tmp_path)])
+    assert (package.level, package.handlers) == before

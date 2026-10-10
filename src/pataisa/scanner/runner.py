@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 from urllib.parse import quote, urlsplit
@@ -19,6 +20,8 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from playwright.sync_api import Browser, BrowserContext, Playwright
+
+logger = logging.getLogger(__name__)
 
 _FIRST_HTTP_ERROR = 400
 _POLL_MS = 100
@@ -53,6 +56,8 @@ class ScanOptions:
 def scan_directory(root: Path, options: ScanOptions | None = None) -> ScanResult:
     """Scan every HTML file under ``root``, served from a local web server.
 
+    Each page is logged at INFO before it is scanned, and each page that fails at WARNING.
+
     Raises:
         NoPagesError: ``root`` contains no HTML files.
         BrowserNotInstalledError: Playwright's Chromium build is missing.
@@ -67,7 +72,8 @@ def scan_directory(root: Path, options: ScanOptions | None = None) -> ScanResult
 def scan_urls(urls: Sequence[str], options: ScanOptions | None = None) -> ScanResult:
     """Scan pages by their URLs, in the order given, with one browser.
 
-    A URL that appears more than once is scanned once.
+    A URL that appears more than once is scanned once. Each page is logged at INFO before it
+    is scanned, and each page that fails at WARNING.
 
     Raises:
         InvalidURLError: A URL is not an http or https URL. Nothing is scanned.
@@ -94,15 +100,21 @@ def scan_url(url: str, options: ScanOptions | None = None) -> ScanResult:
 
 
 def _scan(pages: Sequence[tuple[str, str]], options: ScanOptions) -> ScanResult:
+    results: list[PageResult] = []
     with sync_playwright() as playwright:
         browser = _launch(playwright)
         try:
             context = browser.new_context(user_agent=_user_agent(browser), accept_downloads=False)
             context.add_init_script(script=axe_source())
-            results = tuple(_scan_page(context, name, url, options) for name, url in pages)
+            for number, (name, url) in enumerate(pages, start=1):
+                logger.info("scanning %d of %d: %s", number, len(pages), name)
+                result = _scan_page(context, name, url, options)
+                if result.error is not None:
+                    logger.warning("could not scan %s: %s", name, result.error)
+                results.append(result)
         finally:
             browser.close()
-    return ScanResult(axe_version=AXE_VERSION, pages=results)
+    return ScanResult(axe_version=AXE_VERSION, pages=tuple(results))
 
 
 def _launch(playwright: Playwright) -> Browser:

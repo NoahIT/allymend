@@ -40,6 +40,8 @@ A folder is served locally and every HTML file in it is scanned, and each proble
 
 To scan a list of pages, put one URL per line in a file and pass it with `@`, for example `poetry run pataisa scan @live/targets.txt`.
 
+The report goes to standard output, or to a file with `--output`. Progress and warnings go to standard error, so they never end up in the report. `--quiet` hides the progress.
+
 The exit code is 0 when nothing was found, 1 when problems were found, and 2 when a page couldn't be scanned.
 
 ## Development
