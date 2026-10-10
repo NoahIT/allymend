@@ -55,3 +55,4 @@ Pataisa runs on a developer's machine or in their CI with that user's permission
 
 - Pataisa runs with the user's full permissions. It doesn't sandbox the user's own build.
 - Pages loaded in the browser can make their own network requests, as they would in any browser.
+- axe-core runs inside the page it checks, so a page can interfere with it, for example by replacing it or faking its results. Results that come back in the wrong shape are reported as an error, but a page that fakes plausible results can hide its own problems. This only affects that page's report.

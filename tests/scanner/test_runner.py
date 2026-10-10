@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from pataisa.errors import BrowserNotInstalledError
-from pataisa.scanner import scan_directory, scan_url, scan_urls
+from pataisa.scanner import ScanOptions, scan_directory, scan_url, scan_urls
 from pataisa.scanner.site import serve
 
 pytestmark = pytest.mark.browser
@@ -92,6 +92,59 @@ def test_scan_url_reports_unreachable_hosts() -> None:
     [page] = scan_url(f"http://127.0.0.1:{unused_port()}/").pages
     assert page.error is not None
     assert "ERR_CONNECTION_REFUSED" in page.error
+
+
+@pytest.mark.parametrize(
+    "script",
+    [
+        "for (;;) {}",
+        "addEventListener('load', () => setTimeout(() => { for (;;) {} }, 0));",
+    ],
+    ids=["while-loading", "after-loading"],
+)
+def test_a_page_that_freezes_is_reported_and_the_scan_continues(
+    tmp_path: Path, write_page: Callable[..., Path], script: str
+) -> None:
+    write_page("frozen.html", f"<script>{script}</script>")
+    write_page("index.html", f'<img src="{PIXEL}">')
+
+    frozen, index = scan_directory(tmp_path, ScanOptions(timeout_ms=2000)).pages
+
+    assert frozen.error == "did not finish within 2 s"
+    assert index.error is None
+    assert [o.rule_id for o in index.occurrences] == ["image-alt"]
+
+
+def test_finds_problems_inside_same_origin_iframes(
+    tmp_path: Path, write_page: Callable[..., Path]
+) -> None:
+    write_page("index.html", '<iframe src="frame.html" title="Product photos"></iframe>')
+    write_page("frame.html", f'<img src="{PIXEL}">')
+
+    pages = {page.page: page for page in scan_directory(tmp_path).pages}
+
+    targets = [o.target for o in pages["index.html"].occurrences if o.rule_id == "image-alt"]
+    assert targets == [("iframe", "img")]
+
+
+@pytest.mark.parametrize(
+    ("replacement", "error"),
+    [
+        ("{ run: () => Promise.reject(new Error('blocked')) }", "axe-core failed: Error: blocked"),
+        (
+            "{ run: async () => ({ violations: 'none' }) }",
+            "axe-core returned results in an unexpected format",
+        ),
+    ],
+    ids=["rejects", "malformed-results"],
+)
+def test_reports_a_page_that_replaces_axe(
+    tmp_path: Path, write_page: Callable[..., Path], replacement: str, error: str
+) -> None:
+    write_page("index.html", f"<script>window.axe = {replacement};</script>")
+    [page] = scan_directory(tmp_path).pages
+    assert page.error == error
+    assert page.occurrences == ()
 
 
 def test_reports_a_missing_browser(

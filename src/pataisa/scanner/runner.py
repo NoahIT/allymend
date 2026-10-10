@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 from urllib.parse import quote, urlsplit
 
 from playwright.sync_api import Error as PlaywrightError
+from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 from playwright.sync_api import sync_playwright
 
 from pataisa import __version__
@@ -20,6 +21,20 @@ if TYPE_CHECKING:
     from playwright.sync_api import Browser, BrowserContext, Playwright
 
 _FIRST_HTTP_ERROR = 400
+_POLL_MS = 100
+
+_RUN_AXE = """
+options => {
+  if (window.__pataisaRun === undefined) {
+    window.__pataisaRun = null;
+    axe.run(document, options).then(
+      results => { window.__pataisaRun = { results }; },
+      error => { window.__pataisaRun = { error: String(error) }; },
+    );
+  }
+  return window.__pataisaRun;
+}
+"""
 
 
 @dataclass(frozen=True, slots=True)
@@ -28,7 +43,7 @@ class ScanOptions:
 
     Attributes:
         tags: axe-core rule tags to run. Defaults to WCAG 2.0, 2.1 and 2.2 level A and AA.
-        timeout_ms: How long to wait for each page to load.
+        timeout_ms: How long to wait for each page to load, and again for axe-core to check it.
     """
 
     tags: tuple[str, ...] = WCAG_TAGS
@@ -79,12 +94,12 @@ def scan_url(url: str, options: ScanOptions | None = None) -> ScanResult:
 
 
 def _scan(pages: Sequence[tuple[str, str]], options: ScanOptions) -> ScanResult:
-    source = axe_source()
     with sync_playwright() as playwright:
         browser = _launch(playwright)
         try:
             context = browser.new_context(user_agent=_user_agent(browser), accept_downloads=False)
-            results = tuple(_scan_page(context, name, url, source, options) for name, url in pages)
+            context.add_init_script(script=axe_source())
+            results = tuple(_scan_page(context, name, url, options) for name, url in pages)
         finally:
             browser.close()
     return ScanResult(axe_version=AXE_VERSION, pages=results)
@@ -108,23 +123,28 @@ def _user_agent(browser: Browser) -> str:
     return f"{default} pataisa/{__version__}"
 
 
-def _scan_page(
-    context: BrowserContext, name: str, url: str, source: str, options: ScanOptions
-) -> PageResult:
+def _scan_page(context: BrowserContext, name: str, url: str, options: ScanOptions) -> PageResult:
     page = context.new_page()
     try:
         response = page.goto(url, wait_until="load", timeout=options.timeout_ms)
         if response is not None and response.status >= _FIRST_HTTP_ERROR:
             return PageResult(page=name, error=f"HTTP {response.status}")
-        page.evaluate(source)
-        raw = page.evaluate(
-            "options => axe.run(document, options)",
-            {
+        outcome = page.wait_for_function(
+            _RUN_AXE,
+            arg={
                 "runOnly": {"type": "tag", "values": list(options.tags)},
                 "resultTypes": ["violations"],
             },
+            polling=_POLL_MS,
+            timeout=options.timeout_ms,
+        ).json_value()
+        if isinstance(outcome, dict) and "error" in outcome:
+            return PageResult(page=name, error=f"axe-core failed: {outcome['error']}")
+        occurrences = parse_violations(
+            outcome.get("results") if isinstance(outcome, dict) else None
         )
-        occurrences = parse_violations(raw)
+    except PlaywrightTimeoutError:
+        return PageResult(page=name, error=f"did not finish within {options.timeout_ms / 1000:g} s")
     except PlaywrightError as error:
         return PageResult(page=name, error=_first_line(error.message))
     except AxeResultError as error:

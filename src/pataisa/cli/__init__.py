@@ -124,6 +124,6 @@ def _parser() -> argparse.ArgumentParser:
         type=_seconds,
         default=30.0,
         metavar="SECONDS",
-        help="how long to wait for each page to load (default: 30)",
+        help="how long to wait for each page to load, and again for it to be checked (default: 30)",
     )
     return parser
