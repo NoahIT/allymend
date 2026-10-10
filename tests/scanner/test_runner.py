@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from pataisa.errors import BrowserNotInstalledError
-from pataisa.scanner import scan_directory, scan_url
+from pataisa.scanner import scan_directory, scan_url, scan_urls
 from pataisa.scanner.site import serve
 
 pytestmark = pytest.mark.browser
@@ -66,6 +66,19 @@ def test_scan_url_scans_a_page_over_http(tmp_path: Path, write_page: Callable[..
         [page] = scan_url(url).pages
     assert page.page == url
     assert [o.rule_id for o in page.occurrences] == ["image-alt"]
+
+
+def test_scan_urls_scans_each_page_once_in_order(
+    tmp_path: Path, write_page: Callable[..., Path]
+) -> None:
+    write_page("index.html")
+    write_page("shop.html", f'<img src="{PIXEL}">')
+    with serve(tmp_path) as base_url:
+        home, shop = f"{base_url}index.html", f"{base_url}shop.html"
+        pages = scan_urls([shop, home, shop]).pages
+    assert [page.page for page in pages] == [shop, home]
+    assert [o.rule_id for o in pages[0].occurrences] == ["image-alt"]
+    assert pages[1].occurrences == ()
 
 
 def test_scan_url_reports_http_errors(tmp_path: Path) -> None:

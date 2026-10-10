@@ -21,6 +21,13 @@ class UnknownTargetError(PataisaError):
         self.target = target
 
 
+class MixedTargetsError(PataisaError):
+    """More than one folder, or a folder together with URLs, was given to scan."""
+
+    def __init__(self) -> None:
+        super().__init__("scan either one folder or one or more URLs, not both")
+
+
 class InvalidURLError(PataisaError):
     """The URL to scan is not an http or https address."""
 

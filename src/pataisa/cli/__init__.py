@@ -7,8 +7,8 @@ from typing import TYPE_CHECKING
 
 from pataisa import __version__
 from pataisa.cli.output import render_json, render_text
-from pataisa.errors import PataisaError, UnknownTargetError
-from pataisa.scanner import ScanOptions, scan_directory, scan_url
+from pataisa.errors import MixedTargetsError, PataisaError, UnknownTargetError
+from pataisa.scanner import ScanOptions, scan_directory, scan_urls
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -28,7 +28,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     """
     args = _parser().parse_args(argv)
     try:
-        result = _scan(args.target, ScanOptions(timeout_ms=round(args.timeout * 1000)))
+        result = _scan(args.targets, ScanOptions(timeout_ms=round(args.timeout * 1000)))
     except PataisaError as error:
         sys.stderr.write(f"pataisa: {error}\n")
         return EXIT_ERROR
@@ -45,13 +45,16 @@ def main(argv: Sequence[str] | None = None) -> int:
     return _exit_code(result)
 
 
-def _scan(target: str, options: ScanOptions) -> ScanResult:
-    if target.startswith(("http://", "https://")):
-        return scan_url(target, options)
-    folder = Path(target)
-    if not folder.is_dir():
-        raise UnknownTargetError(target)
-    return scan_directory(folder, options)
+def _scan(targets: Sequence[str], options: ScanOptions) -> ScanResult:
+    folders = [target for target in targets if not target.startswith(("http://", "https://"))]
+    for folder in folders:
+        if not Path(folder).is_dir():
+            raise UnknownTargetError(folder)
+    if not folders:
+        return scan_urls(targets, options)
+    if len(targets) > 1:
+        raise MixedTargetsError
+    return scan_directory(Path(folders[0]), options)
 
 
 def _exit_code(result: ScanResult) -> int:
@@ -79,10 +82,15 @@ def _parser() -> argparse.ArgumentParser:
 
     scan = commands.add_parser(
         "scan",
-        help="scan a folder of HTML files or a web page",
-        description="Scan a folder of HTML files, or one web page by its URL.",
+        help="scan a folder of HTML files or web pages",
+        description="Scan a folder of HTML files, or one or more web pages by their URLs.",
     )
-    scan.add_argument("target", help="a folder of HTML files, or an http or https URL")
+    scan.add_argument(
+        "targets",
+        nargs="+",
+        metavar="target",
+        help="a folder of HTML files, or one or more http or https URLs",
+    )
     scan.add_argument(
         "--format", choices=["text", "json"], default="text", help="output format (default: text)"
     )

@@ -49,6 +49,25 @@ def scan_directory(root: Path, options: ScanOptions | None = None) -> ScanResult
         return _scan([(page, base_url + quote(page)) for page in pages], options or ScanOptions())
 
 
+def scan_urls(urls: Sequence[str], options: ScanOptions | None = None) -> ScanResult:
+    """Scan pages by their URLs, in the order given, with one browser.
+
+    A URL that appears more than once is scanned once.
+
+    Raises:
+        InvalidURLError: A URL is not an http or https URL. Nothing is scanned.
+        BrowserNotInstalledError: Playwright's Chromium build is missing.
+    """
+    for url in urls:
+        parts = urlsplit(url)
+        if parts.scheme not in {"http", "https"} or not parts.netloc:
+            raise InvalidURLError(url)
+    unique = list(dict.fromkeys(urls))
+    if not unique:
+        return ScanResult(axe_version=AXE_VERSION, pages=())
+    return _scan([(url, url) for url in unique], options or ScanOptions())
+
+
 def scan_url(url: str, options: ScanOptions | None = None) -> ScanResult:
     """Scan one page by its URL.
 
@@ -56,10 +75,7 @@ def scan_url(url: str, options: ScanOptions | None = None) -> ScanResult:
         InvalidURLError: ``url`` is not an http or https URL.
         BrowserNotInstalledError: Playwright's Chromium build is missing.
     """
-    parts = urlsplit(url)
-    if parts.scheme not in {"http", "https"} or not parts.netloc:
-        raise InvalidURLError(url)
-    return _scan([(url, url)], options or ScanOptions())
+    return scan_urls([url], options)
 
 
 def _scan(pages: Sequence[tuple[str, str]], options: ScanOptions) -> ScanResult:

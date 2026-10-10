@@ -41,6 +41,21 @@ def test_rejects_targets_that_are_neither_folders_nor_urls(
     )
 
 
+@pytest.mark.parametrize(
+    "extra", ["https://example.com/", "second-folder"], ids=["folder-and-url", "two-folders"]
+)
+def test_scans_either_one_folder_or_urls(
+    tmp_path: Path, extra: str, capsys: pytest.CaptureFixture[str]
+) -> None:
+    second = tmp_path / "second-folder"
+    second.mkdir()
+    target = extra if extra.startswith("https://") else str(second)
+    assert main(["scan", str(tmp_path), target]) == EXIT_ERROR
+    assert capsys.readouterr().err == (
+        "pataisa: scan either one folder or one or more URLs, not both\n"
+    )
+
+
 def test_reports_a_folder_without_html_files(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:

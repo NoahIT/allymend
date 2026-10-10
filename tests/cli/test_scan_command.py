@@ -50,6 +50,20 @@ def test_writes_json_to_a_file(
     assert capsys.readouterr().err == f"pataisa: wrote {report}\n"
 
 
+def test_scans_several_urls(
+    tmp_path: Path, write_page: Callable[..., Path], capsys: pytest.CaptureFixture[str]
+) -> None:
+    write_page("index.html")
+    write_page("about.html", lang=None)
+    with serve(tmp_path) as base_url:
+        code = main(["scan", f"{base_url}index.html", f"{base_url}about.html"])
+    assert code == EXIT_PROBLEMS
+    lines = capsys.readouterr().out.splitlines()
+    assert lines[0] == "Scanned 2 pages with axe-core 4.13.0."
+    assert f"{base_url}index.html: no problems found" in lines
+    assert f"{base_url}about.html: 1 problem" in lines
+
+
 def test_page_that_cannot_be_scanned_exits_with_2(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
