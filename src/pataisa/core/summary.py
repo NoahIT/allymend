@@ -8,13 +8,19 @@ _SEVERITY = {Impact.MINOR: 1, Impact.MODERATE: 2, Impact.SERIOUS: 3, Impact.CRIT
 
 @dataclass(frozen=True, slots=True)
 class RuleCount:
-    """How many elements on a page fail one rule."""
+    """The elements on a page that fail one rule."""
 
     rule_id: str
     summary: str
+    help_url: str
     impact: Impact | None
     wcag: tuple[str, ...]
-    elements: int
+    targets: tuple[str, ...]
+
+    @property
+    def elements(self) -> int:
+        """How many elements fail the rule."""
+        return len(self.targets)
 
 
 def count_by_rule(occurrences: Iterable[Occurrence]) -> tuple[RuleCount, ...]:
@@ -29,9 +35,10 @@ def count_by_rule(occurrences: Iterable[Occurrence]) -> tuple[RuleCount, ...]:
         RuleCount(
             rule_id=rule_id,
             summary=members[0].summary,
+            help_url=members[0].help_url,
             impact=_most_severe(members),
             wcag=members[0].wcag,
-            elements=len(members),
+            targets=tuple(" >> ".join(member.target) for member in members),
         )
         for rule_id, members in groups.items()
     )

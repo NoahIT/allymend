@@ -3,6 +3,7 @@ import json
 from pataisa import __version__
 from pataisa.cli.output import LIMITS_NOTE, render_json, render_markdown, render_text
 from pataisa.core.models import Impact, Occurrence, PageResult, ScanResult
+from pataisa.core.rules import RULES
 
 MISSING_ALT = Occurrence(
     rule_id="image-alt",
@@ -24,6 +25,16 @@ MISSING_LANG = Occurrence(
     html="<html>",
     failure_summary="Fix any of the following: The <html> element does not have a lang attribute",
 )
+MARQUEE = Occurrence(
+    rule_id="marquee",
+    impact=None,
+    wcag=("2.2.2",),
+    summary="<marquee> elements are deprecated and must not be used",
+    help_url="https://dequeuniversity.com/rules/axe/4.13/marquee",
+    target=("marquee",),
+    html="<marquee>",
+    failure_summary="Fix all of the following: Element is a marquee",
+)
 RESULT = ScanResult(
     axe_version="4.13.0",
     pages=(
@@ -34,13 +45,57 @@ RESULT = ScanResult(
 )
 
 
-def test_text_lists_each_problem_with_its_rule_and_criterion() -> None:
+def single_page(*occurrences: Occurrence) -> ScanResult:
+    return ScanResult(
+        axe_version="4.13.0", pages=(PageResult(page="index.html", occurrences=occurrences),)
+    )
+
+
+def test_text_counts_problems_and_rules_on_each_page() -> None:
     lines = render_text(RESULT).splitlines()
-    start = lines.index("index.html: 2 problems")
-    assert lines[start + 1 : start + 4] == [
-        "  1. Images must have alternative text",
-        "     rule image-alt; impact critical; WCAG 1.1.1",
-        "     element: main > img",
+    assert "index.html: 2 problems from 2 rules" in lines
+    assert lines.index("  1. Page language is not set (1 element)") < lines.index(
+        "  2. Image has no text alternative (1 element)"
+    )
+
+
+def test_text_explains_each_rule_once() -> None:
+    lines = render_text(RESULT).splitlines()
+    start = lines.index("  2. Image has no text alternative (1 element)")
+    rule = RULES["image-alt"]
+    assert lines[start + 1 : start + 8] == [
+        f"     Who it affects: {rule.affects}",
+        f"     Why it matters: {rule.why}",
+        f"     How to fix: {rule.fix}",
+        "     Fix type: needs a person to decide",
+        "     WCAG 1.1.1 Non-text Content (level A): "
+        "https://www.w3.org/WAI/WCAG22/Understanding/non-text-content",
+        "     axe-core rule image-alt, impact critical",
+        "     Elements: main > img",
+    ]
+
+
+def test_text_lists_five_elements_then_how_many_more() -> None:
+    images = (
+        MISSING_ALT.model_copy(update={"target": (f"li:nth-child({n}) > img",)})
+        for n in range(1, 8)
+    )
+    lines = render_text(single_page(*images)).splitlines()
+    assert "  1. Image has no text alternative (7 elements)" in lines
+    assert (
+        "     Elements: li:nth-child(1) > img, li:nth-child(2) > img, li:nth-child(3) > img, "
+        "li:nth-child(4) > img, li:nth-child(5) > img, and 2 more"
+    ) in lines
+
+
+def test_text_falls_back_to_axe_for_rules_outside_the_catalog() -> None:
+    lines = render_text(single_page(MARQUEE)).splitlines()
+    start = lines.index("  1. <marquee> elements are deprecated and must not be used (1 element)")
+    assert lines[start + 1 : start + 5] == [
+        "     More information: https://dequeuniversity.com/rules/axe/4.13/marquee",
+        "     WCAG 2.2.2",
+        "     axe-core rule marquee",
+        "     Elements: marquee",
     ]
 
 
@@ -60,21 +115,10 @@ def test_text_ends_with_a_summary_and_the_limits_of_automated_checks() -> None:
 
 
 def test_text_uses_singular_nouns_for_one() -> None:
-    result = ScanResult(
-        axe_version="4.13.0", pages=(PageResult(page="index.html", occurrences=(MISSING_ALT,)),)
-    )
-    lines = render_text(result).splitlines()
+    lines = render_text(single_page(MISSING_ALT)).splitlines()
     assert lines[0] == "Scanned 1 page with axe-core 4.13.0."
-    assert "index.html: 1 problem" in lines
+    assert "index.html: 1 problem from 1 rule" in lines
     assert lines[-2] == "Summary: 1 problem on 1 of 1 page."
-
-
-def test_text_leaves_out_missing_impact_and_criteria() -> None:
-    bare = MISSING_ALT.model_copy(update={"impact": None, "wcag": ()})
-    result = ScanResult(
-        axe_version="4.13.0", pages=(PageResult(page="a.html", occurrences=(bare,)),)
-    )
-    assert "     rule image-alt" in render_text(result).splitlines()
 
 
 def test_text_has_no_colour_codes() -> None:
@@ -101,15 +145,13 @@ def test_markdown_groups_problems_by_rule_on_pages_with_problems() -> None:
     assert "## index.html" in lines
     assert "## about.html" not in lines
     assert "## missing.html" not in lines
-    assert "| image-alt | critical | 1.1.1 | 1 | Images must have alternative text |" in lines
-    assert (
-        "| html-has-lang | serious | 3.1.1 | 1 | &lt;html&gt; element must have a lang attribute |"
-        in lines
-    )
+    assert "| Problem | Rule | Fix type | Impact | WCAG | Elements |" in lines
+    assert "| Page language is not set | html-has-lang | auto | serious | 3.1.1 | 1 |" in lines
+    assert "| Image has no text alternative | image-alt | human | critical | 1.1.1 | 1 |" in lines
 
 
 def test_markdown_counts_repeated_rules_and_lists_three_in_the_overview() -> None:
-    occurrences = (
+    result = single_page(
         MISSING_ALT,
         MISSING_ALT,
         MISSING_ALT,
@@ -117,22 +159,23 @@ def test_markdown_counts_repeated_rules_and_lists_three_in_the_overview() -> Non
         MISSING_ALT.model_copy(update={"rule_id": "link-name"}),
         MISSING_ALT.model_copy(update={"rule_id": "label"}),
     )
-    result = ScanResult(
-        axe_version="4.13.0", pages=(PageResult(page="index.html", occurrences=occurrences),)
-    )
     lines = render_markdown(result).splitlines()
     assert "| index.html | 6 | image-alt (3), html-has-lang (1), label (1) |" in lines
-    assert "| image-alt | critical | 1.1.1 | 3 | Images must have alternative text |" in lines
+    assert "| Image has no text alternative | image-alt | human | critical | 1.1.1 | 3 |" in lines
 
 
-def test_markdown_escapes_text_from_pages() -> None:
+def test_markdown_escapes_text_from_pages_and_axe() -> None:
     result = ScanResult(
         axe_version="4.13.0",
-        pages=(PageResult(page="shop|<b>.html", occurrences=(MISSING_ALT,)),),
+        pages=(PageResult(page="shop|<b>.html", occurrences=(MARQUEE,)),),
     )
     lines = render_markdown(result).splitlines()
     assert "## shop\\|&lt;b&gt;.html" in lines
-    assert "| shop\\|&lt;b&gt;.html | 1 | image-alt (1) |" in lines
+    assert "| shop\\|&lt;b&gt;.html | 1 | marquee (1) |" in lines
+    assert (
+        "| &lt;marquee&gt; elements are deprecated and must not be used "
+        "| marquee |  |  | 2.2.2 | 1 |"
+    ) in lines
 
 
 def test_markdown_ends_with_the_summary_and_the_limits_of_automated_checks() -> None:

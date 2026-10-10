@@ -19,8 +19,9 @@ def test_reports_problems_and_exits_with_1(
     assert main(["scan", str(tmp_path)]) == EXIT_PROBLEMS
 
     lines = capsys.readouterr().out.splitlines()
-    assert "index.html: 1 problem" in lines
-    assert "     rule html-has-lang; impact serious; WCAG 3.1.1" in lines
+    assert "index.html: 1 problem from 1 rule" in lines
+    assert "  1. Page language is not set (1 element)" in lines
+    assert "     axe-core rule html-has-lang, impact serious" in lines
     assert "about.html: no problems found" in lines
     assert "Summary: 1 problem on 1 of 2 pages." in lines
 
@@ -58,10 +59,7 @@ def test_writes_markdown(
     lines = capsys.readouterr().out.splitlines()
     assert lines[0] == "# Accessibility scan"
     assert "| index.html | 1 | html-has-lang (1) |" in lines
-    assert (
-        "| html-has-lang | serious | 3.1.1 | 1 | &lt;html&gt; element must have a lang attribute |"
-        in lines
-    )
+    assert "| Page language is not set | html-has-lang | auto | serious | 3.1.1 | 1 |" in lines
 
 
 def test_scans_several_urls(
@@ -75,7 +73,7 @@ def test_scans_several_urls(
     lines = capsys.readouterr().out.splitlines()
     assert lines[0] == "Scanned 2 pages with axe-core 4.13.0."
     assert f"{base_url}index.html: no problems found" in lines
-    assert f"{base_url}about.html: 1 problem" in lines
+    assert f"{base_url}about.html: 1 problem from 1 rule" in lines
 
 
 def test_scans_urls_listed_in_a_file(
@@ -92,7 +90,7 @@ def test_scans_urls_listed_in_a_file(
     assert code == EXIT_PROBLEMS
     lines = capsys.readouterr().out.splitlines()
     assert lines[0] == "Scanned 2 pages with axe-core 4.13.0."
-    assert f"{base_url}about.html: 1 problem" in lines
+    assert f"{base_url}about.html: 1 problem from 1 rule" in lines
 
 
 def test_page_that_cannot_be_scanned_exits_with_2(

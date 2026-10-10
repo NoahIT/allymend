@@ -2,14 +2,16 @@ from pataisa.core.models import Impact, Occurrence
 from pataisa.core.summary import RuleCount, count_by_rule
 
 
-def occurrence(rule_id: str, impact: Impact | None = Impact.SERIOUS) -> Occurrence:
+def occurrence(
+    rule_id: str, impact: Impact | None = Impact.SERIOUS, target: tuple[str, ...] = ("main",)
+) -> Occurrence:
     return Occurrence(
         rule_id=rule_id,
         impact=impact,
         wcag=("1.1.1",),
         summary=f"{rule_id} summary",
         help_url=f"https://dequeuniversity.com/rules/axe/4.13/{rule_id}",
-        target=("main",),
+        target=target,
         html="<main>",
         failure_summary="",
     )
@@ -32,14 +34,21 @@ def test_counts_elements_per_rule_with_the_most_frequent_first() -> None:
     ]
 
 
-def test_keeps_the_rule_summary_and_criteria() -> None:
-    assert count_by_rule([occurrence("image-alt")]) == (
+def test_keeps_the_rule_details_and_each_element() -> None:
+    counts = count_by_rule(
+        [
+            occurrence("image-alt", target=("img",)),
+            occurrence("image-alt", target=("x-card", "img")),
+        ]
+    )
+    assert counts == (
         RuleCount(
             rule_id="image-alt",
             summary="image-alt summary",
+            help_url="https://dequeuniversity.com/rules/axe/4.13/image-alt",
             impact=Impact.SERIOUS,
             wcag=("1.1.1",),
-            elements=1,
+            targets=("img", "x-card >> img"),
         ),
     )
 

@@ -4,18 +4,26 @@ import json
 from typing import TYPE_CHECKING
 
 from pataisa import __version__
+from pataisa.core.rules import CRITERIA, RULES, Remediability
 from pataisa.core.summary import count_by_rule
 
 if TYPE_CHECKING:
     from pydantic.main import IncEx
 
     from pataisa.core.models import PageResult, ScanResult
+    from pataisa.core.summary import RuleCount
 
 SCHEMA_VERSION = 1
 LIMITS_NOTE = (
     "Automated checks find only some accessibility problems. "
     "Test with people who use assistive technology too."
 )
+_SHOWN_ELEMENTS = 5
+_FIX_TYPES = {
+    Remediability.AUTO: "can be automated",
+    Remediability.SUGGESTED: "a fix can be suggested, but a person should review it",
+    Remediability.HUMAN: "needs a person to decide",
+}
 
 
 def render_text(result: ScanResult) -> str:
@@ -60,15 +68,11 @@ def render_markdown(result: ScanResult) -> str:
                 "",
                 f"## {_escape(page.page)}",
                 "",
-                "| Rule | Impact | WCAG | Elements | Description |",
-                "| --- | --- | --- | ---: | --- |",
+                "| Problem | Rule | Fix type | Impact | WCAG | Elements |",
+                "| --- | --- | --- | --- | --- | ---: |",
             ]
         )
-        lines.extend(
-            f"| {count.rule_id} | {count.impact or ''} | {', '.join(count.wcag)} | "
-            f"{count.elements} | {_escape(count.summary)} |"
-            for count in count_by_rule(page.occurrences)
-        )
+        lines.extend(_markdown_rule_row(count) for count in count_by_rule(page.occurrences))
     lines.extend(["", _summary(result), "", LIMITS_NOTE])
     return "\n".join(lines) + "\n"
 
@@ -81,6 +85,16 @@ def _overview_row(page: PageResult) -> str:
     return f"| {_escape(page.page)} | {len(page.occurrences)} | {rules} |"
 
 
+def _markdown_rule_row(count: RuleCount) -> str:
+    rule = RULES.get(count.rule_id)
+    title = rule.title if rule is not None else count.summary
+    fix_type = rule.remediability if rule is not None else ""
+    return (
+        f"| {_escape(title)} | {count.rule_id} | {fix_type} | {count.impact or ''} | "
+        f"{', '.join(count.wcag)} | {count.elements} |"
+    )
+
+
 def _escape(text: str) -> str:
     replacements = {"&": "&amp;", "<": "&lt;", ">": "&gt;", "|": "\\|", "\n": " "}
     return "".join(replacements.get(character, character) for character in text)
@@ -91,21 +105,46 @@ def _page_lines(page: PageResult) -> list[str]:
         return [f"{page.page}: could not be scanned ({page.error})"]
     if not page.occurrences:
         return [f"{page.page}: no problems found"]
-    lines = [f"{page.page}: {_count(len(page.occurrences), 'problem')}"]
-    for number, occurrence in enumerate(page.occurrences, start=1):
-        details = [f"rule {occurrence.rule_id}"]
-        if occurrence.impact is not None:
-            details.append(f"impact {occurrence.impact}")
-        if occurrence.wcag:
-            details.append(f"WCAG {', '.join(occurrence.wcag)}")
+    counts = count_by_rule(page.occurrences)
+    lines = [
+        f"{page.page}: {_count(len(page.occurrences), 'problem')} from "
+        f"{_count(len(counts), 'rule')}"
+    ]
+    for number, count in enumerate(counts, start=1):
+        lines.append("")
+        lines.extend(_rule_lines(number, count))
+    return lines
+
+
+def _rule_lines(number: int, count: RuleCount) -> list[str]:
+    rule = RULES.get(count.rule_id)
+    title = rule.title if rule is not None else count.summary
+    lines = [f"  {number}. {title} ({_count(count.elements, 'element')})"]
+    if rule is not None:
         lines.extend(
             [
-                f"  {number}. {occurrence.summary}",
-                f"     {'; '.join(details)}",
-                f"     element: {' >> '.join(occurrence.target)}",
+                f"     Who it affects: {rule.affects}",
+                f"     Why it matters: {rule.why}",
+                f"     How to fix: {rule.fix}",
+                f"     Fix type: {_FIX_TYPES[rule.remediability]}",
             ]
         )
+    else:
+        lines.append(f"     More information: {count.help_url}")
+    lines.extend(f"     {_criterion(criterion)}" for criterion in count.wcag)
+    impact = f", impact {count.impact}" if count.impact is not None else ""
+    lines.append(f"     axe-core rule {count.rule_id}{impact}")
+    hidden = count.elements - _SHOWN_ELEMENTS
+    shown = ", ".join(count.targets[:_SHOWN_ELEMENTS])
+    lines.append(f"     Elements: {shown}" + (f", and {hidden} more" if hidden > 0 else ""))
     return lines
+
+
+def _criterion(number: str) -> str:
+    criterion = CRITERIA.get(number)
+    if criterion is None:
+        return f"WCAG {number}"
+    return f"WCAG {number} {criterion.name} (level {criterion.level}): {criterion.url}"
 
 
 def _summary(result: ScanResult) -> str:
