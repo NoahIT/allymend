@@ -4,6 +4,7 @@ import json
 from typing import TYPE_CHECKING
 
 from pataisa import __version__
+from pataisa.core.summary import count_by_rule
 
 if TYPE_CHECKING:
     from pydantic.main import IncEx
@@ -38,6 +39,51 @@ def render_json(result: ScanResult, *, include_markup: bool = False) -> str:
         **result.model_dump(mode="json", exclude=exclude),
     }
     return json.dumps(document, indent=2, ensure_ascii=False) + "\n"
+
+
+def render_markdown(result: ScanResult) -> str:
+    """Render a scan as Markdown, with the problems on each page grouped by rule."""
+    lines = [
+        "# Accessibility scan",
+        "",
+        f"Scanned {_count(len(result.pages), 'page')} with axe-core {result.axe_version}.",
+        "",
+        "| Page | Problems | Most frequent rules |",
+        "| --- | ---: | --- |",
+    ]
+    lines.extend(_overview_row(page) for page in result.pages)
+    for page in result.pages:
+        if not page.occurrences:
+            continue
+        lines.extend(
+            [
+                "",
+                f"## {_escape(page.page)}",
+                "",
+                "| Rule | Impact | WCAG | Elements | Description |",
+                "| --- | --- | --- | ---: | --- |",
+            ]
+        )
+        lines.extend(
+            f"| {count.rule_id} | {count.impact or ''} | {', '.join(count.wcag)} | "
+            f"{count.elements} | {_escape(count.summary)} |"
+            for count in count_by_rule(page.occurrences)
+        )
+    lines.extend(["", _summary(result), "", LIMITS_NOTE])
+    return "\n".join(lines) + "\n"
+
+
+def _overview_row(page: PageResult) -> str:
+    if page.error is not None:
+        return f"| {_escape(page.page)} | not scanned | {_escape(page.error)} |"
+    top = count_by_rule(page.occurrences)[:3]
+    rules = ", ".join(f"{count.rule_id} ({count.elements})" for count in top)
+    return f"| {_escape(page.page)} | {len(page.occurrences)} | {rules} |"
+
+
+def _escape(text: str) -> str:
+    replacements = {"&": "&amp;", "<": "&lt;", ">": "&gt;", "|": "\\|", "\n": " "}
+    return "".join(replacements.get(character, character) for character in text)
 
 
 def _page_lines(page: PageResult) -> list[str]:

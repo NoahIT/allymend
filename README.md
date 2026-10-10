@@ -36,7 +36,7 @@ poetry run pataisa scan path/to/site
 poetry run pataisa scan https://www.w3.org/WAI/demos/bad/before/home.html
 ```
 
-A folder is served locally and every HTML file in it is scanned. You can also give one or more URLs, and each of those pages is scanned. Add `--format json` for machine-readable output.
+A folder is served locally and every HTML file in it is scanned. You can also give one or more URLs, and each of those pages is scanned. Add `--format json` for machine-readable output, or `--format markdown` for a report grouped by rule.
 
 The exit code is 0 when nothing was found, 1 when problems were found, and 2 when a page couldn't be scanned.
 

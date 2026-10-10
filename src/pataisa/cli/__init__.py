@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from pataisa import __version__
-from pataisa.cli.output import render_json, render_text
+from pataisa.cli.output import render_json, render_markdown, render_text
 from pataisa.errors import MixedTargetsError, PataisaError, UnknownTargetError
 from pataisa.scanner import ScanOptions, scan_directory, scan_urls
 
@@ -35,6 +35,8 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     if args.format == "json":
         report = render_json(result, include_markup=args.include_markup)
+    elif args.format == "markdown":
+        report = render_markdown(result)
     else:
         report = render_text(result)
     if args.output is None:
@@ -92,7 +94,10 @@ def _parser() -> argparse.ArgumentParser:
         help="a folder of HTML files, or one or more http or https URLs",
     )
     scan.add_argument(
-        "--format", choices=["text", "json"], default="text", help="output format (default: text)"
+        "--format",
+        choices=["text", "json", "markdown"],
+        default="text",
+        help="output format (default: text)",
     )
     scan.add_argument(
         "--output", type=Path, metavar="FILE", help="write the report to FILE instead"

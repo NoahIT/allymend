@@ -1,7 +1,7 @@
 import json
 
 from pataisa import __version__
-from pataisa.cli.output import LIMITS_NOTE, render_json, render_text
+from pataisa.cli.output import LIMITS_NOTE, render_json, render_markdown, render_text
 from pataisa.core.models import Impact, Occurrence, PageResult, ScanResult
 
 MISSING_ALT = Occurrence(
@@ -79,6 +79,69 @@ def test_text_leaves_out_missing_impact_and_criteria() -> None:
 
 def test_text_has_no_colour_codes() -> None:
     assert "\x1b" not in render_text(RESULT)
+
+
+def test_markdown_starts_with_an_overview_row_per_page() -> None:
+    lines = render_markdown(RESULT).splitlines()
+    assert lines[:9] == [
+        "# Accessibility scan",
+        "",
+        "Scanned 3 pages with axe-core 4.13.0.",
+        "",
+        "| Page | Problems | Most frequent rules |",
+        "| --- | ---: | --- |",
+        "| index.html | 2 | html-has-lang (1), image-alt (1) |",
+        "| about.html | 0 |  |",
+        "| missing.html | not scanned | HTTP 404 |",
+    ]
+
+
+def test_markdown_groups_problems_by_rule_on_pages_with_problems() -> None:
+    lines = render_markdown(RESULT).splitlines()
+    assert "## index.html" in lines
+    assert "## about.html" not in lines
+    assert "## missing.html" not in lines
+    assert "| image-alt | critical | 1.1.1 | 1 | Images must have alternative text |" in lines
+    assert (
+        "| html-has-lang | serious | 3.1.1 | 1 | &lt;html&gt; element must have a lang attribute |"
+        in lines
+    )
+
+
+def test_markdown_counts_repeated_rules_and_lists_three_in_the_overview() -> None:
+    occurrences = (
+        MISSING_ALT,
+        MISSING_ALT,
+        MISSING_ALT,
+        MISSING_LANG,
+        MISSING_ALT.model_copy(update={"rule_id": "link-name"}),
+        MISSING_ALT.model_copy(update={"rule_id": "label"}),
+    )
+    result = ScanResult(
+        axe_version="4.13.0", pages=(PageResult(page="index.html", occurrences=occurrences),)
+    )
+    lines = render_markdown(result).splitlines()
+    assert "| index.html | 6 | image-alt (3), html-has-lang (1), label (1) |" in lines
+    assert "| image-alt | critical | 1.1.1 | 3 | Images must have alternative text |" in lines
+
+
+def test_markdown_escapes_text_from_pages() -> None:
+    result = ScanResult(
+        axe_version="4.13.0",
+        pages=(PageResult(page="shop|<b>.html", occurrences=(MISSING_ALT,)),),
+    )
+    lines = render_markdown(result).splitlines()
+    assert "## shop\\|&lt;b&gt;.html" in lines
+    assert "| shop\\|&lt;b&gt;.html | 1 | image-alt (1) |" in lines
+
+
+def test_markdown_ends_with_the_summary_and_the_limits_of_automated_checks() -> None:
+    lines = render_markdown(RESULT).splitlines()
+    assert lines[-3:] == [
+        "Summary: 2 problems on 1 of 3 pages. 1 page could not be scanned.",
+        "",
+        LIMITS_NOTE,
+    ]
 
 
 def test_json_is_versioned_and_leaves_out_markup() -> None:

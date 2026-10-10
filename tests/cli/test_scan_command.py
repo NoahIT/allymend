@@ -50,6 +50,20 @@ def test_writes_json_to_a_file(
     assert capsys.readouterr().err == f"pataisa: wrote {report}\n"
 
 
+def test_writes_markdown(
+    tmp_path: Path, write_page: Callable[..., Path], capsys: pytest.CaptureFixture[str]
+) -> None:
+    write_page("index.html", lang=None)
+    assert main(["scan", str(tmp_path), "--format", "markdown"]) == EXIT_PROBLEMS
+    lines = capsys.readouterr().out.splitlines()
+    assert lines[0] == "# Accessibility scan"
+    assert "| index.html | 1 | html-has-lang (1) |" in lines
+    assert (
+        "| html-has-lang | serious | 3.1.1 | 1 | &lt;html&gt; element must have a lang attribute |"
+        in lines
+    )
+
+
 def test_scans_several_urls(
     tmp_path: Path, write_page: Callable[..., Path], capsys: pytest.CaptureFixture[str]
 ) -> None:
