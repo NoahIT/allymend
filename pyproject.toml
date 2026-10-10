@@ -82,6 +82,7 @@ markers = ["browser: needs the Chromium build installed by Playwright"]
 [tool.coverage.run]
 branch = true
 source_pkgs = ["pataisa"]
+concurrency = ["greenlet", "thread"]
 
 [tool.coverage.report]
 fail_under = 90
