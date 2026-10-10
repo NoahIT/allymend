@@ -94,3 +94,47 @@ class ScanResult(_Model):
 
     axe_version: str
     pages: tuple[PageResult, ...]
+
+
+class Fix(_Model):
+    """Source changes that fix one occurrence.
+
+    Attributes:
+        rule_id: The axe-core rule the occurrence fails.
+        page: The page it was found on.
+        edits: The changes to make.
+    """
+
+    rule_id: str
+    page: str
+    edits: tuple[Edit, ...]
+
+
+class Unfixed(_Model):
+    """An occurrence that was left for a person, and why.
+
+    Attributes:
+        rule_id: The axe-core rule the occurrence fails.
+        page: The page it was found on.
+        target: The occurrence's CSS selectors.
+        reason: Why it wasn't fixed.
+    """
+
+    rule_id: str
+    page: str
+    target: tuple[str, ...]
+    reason: str
+
+
+class FixPlan(_Model):
+    """The fixes for one scan, and the occurrences they leave.
+
+    Attributes:
+        fixes: Fixes that were planned, in scan order.
+        unfixed: Occurrences without a fix, in scan order.
+        patch: All the fixes as one unified diff, or an empty string when there are none.
+    """
+
+    fixes: tuple[Fix, ...]
+    unfixed: tuple[Unfixed, ...]
+    patch: str

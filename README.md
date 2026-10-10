@@ -6,7 +6,7 @@ Pataisa is a tool that finds accessibility problems on websites, explains them i
 
 ## Status
 
-Early development. Nothing is usable yet. The first release, 0.1.0, will cover static HTML sites and three kinds of fixes: page language, viewport settings and form labels.
+Early development. Scanning works, and fixing has started. The first release, 0.1.0, will cover static HTML sites and three kinds of fixes: page language, viewport settings and form labels.
 
 ## How it will work
 
@@ -27,8 +27,6 @@ Early development. Nothing is usable yet. The first release, 0.1.0, will cover s
 
 ## Trying it
 
-Scanning works today. Fixes don't exist yet.
-
 ```
 poetry install
 poetry run playwright install chromium
@@ -43,6 +41,16 @@ To scan a list of pages, put one URL per line in a file and pass it with `@`, fo
 The report goes to standard output, or to a file with `--output`. Progress and warnings go to standard error, so they never end up in the report. `--quiet` hides the progress.
 
 The exit code is 0 when nothing was found, 1 when problems were found, and 2 when a page couldn't be scanned.
+
+### Fixing
+
+So far pataisa can fix one problem on its own: a missing page language.
+
+```
+poetry run pataisa fix path/to/site --lang en
+```
+
+This scans the folder and writes the fixes to `pataisa.patch`; your files aren't changed. Everything it couldn't fix is listed with the reason. Review the patch, apply it with `git apply pataisa.patch` from the folder you ran pataisa in, then scan again. Checking each fix automatically before you see it (step 4 above) isn't built yet.
 
 ## Development
 

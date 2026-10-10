@@ -75,6 +75,39 @@ def test_reports_a_folder_without_html_files(
     assert "no HTML files found" in capsys.readouterr().err
 
 
+@pytest.mark.parametrize("target", ["https://example.com/", "missing-folder"])
+def test_fix_needs_a_folder(target: str, capsys: pytest.CaptureFixture[str]) -> None:
+    assert main(["fix", target]) == EXIT_ERROR
+    assert capsys.readouterr().err == (
+        f"pataisa: {target} is not a folder; fixes need the site's source files\n"
+    )
+
+
+def test_fix_needs_the_folder_inside_the_current_one(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    site = tmp_path / "site"
+    work = tmp_path / "work"
+    site.mkdir()
+    work.mkdir()
+    monkeypatch.chdir(work)
+    assert main(["fix", str(site)]) == EXIT_ERROR
+    assert capsys.readouterr().err == (
+        f"pataisa: {site} is outside the current folder; run pataisa fix from a folder that "
+        "contains it, so the patch applies from there\n"
+    )
+
+
+@pytest.mark.parametrize("language", ["English", "en_GB", 'en"'])
+def test_fix_rejects_a_language_that_is_not_a_tag(
+    tmp_path: Path, language: str, capsys: pytest.CaptureFixture[str]
+) -> None:
+    with pytest.raises(SystemExit) as stop:
+        main(["fix", str(tmp_path), "--lang", language])
+    assert stop.value.code == EXIT_ERROR
+    assert "is not a language tag such as en or en-GB" in capsys.readouterr().err
+
+
 def test_leaves_logging_as_it_was(tmp_path: Path) -> None:
     package = logging.getLogger("pataisa")
     before = (package.level, list(package.handlers))

@@ -8,8 +8,15 @@ from pathlib import Path
 from typing import TYPE_CHECKING, override
 
 from pataisa import __version__
-from pataisa.cli.output import render_json, render_markdown, render_text
-from pataisa.errors import MixedTargetsError, PataisaError, UnknownTargetError
+from pataisa.cli.output import render_fix_summary, render_json, render_markdown, render_text
+from pataisa.errors import (
+    FolderOutsideError,
+    MixedTargetsError,
+    NotAFolderError,
+    PataisaError,
+    UnknownTargetError,
+)
+from pataisa.fixers import FixOptions, check_language_tag, plan_fixes
 from pataisa.mapper import map_sources
 from pataisa.scanner import ScanOptions, scan_directory, scan_urls
 
@@ -31,13 +38,18 @@ def main(argv: Sequence[str] | None = None) -> int:
     standard error.
     """
     args = _parser().parse_args(argv)
+    options = ScanOptions(timeout_ms=round(args.timeout * 1000))
+    run = _run_fix if args.command == "fix" else _run_scan
     with _log_to_stderr(quiet=args.quiet):
         try:
-            result = _scan(args.targets, ScanOptions(timeout_ms=round(args.timeout * 1000)))
+            return run(args, options)
         except PataisaError as error:
             sys.stderr.write(f"pataisa: {error}\n")
             return EXIT_ERROR
 
+
+def _run_scan(args: argparse.Namespace, options: ScanOptions) -> int:
+    result = _scan(args.targets, options)
     if args.format == "json":
         report = render_json(result, include_markup=args.include_markup)
     elif args.format == "markdown":
@@ -51,6 +63,26 @@ def main(argv: Sequence[str] | None = None) -> int:
         if not args.quiet:
             sys.stderr.write(f"pataisa: wrote {args.output}\n")
     return _exit_code(result)
+
+
+def _run_fix(args: argparse.Namespace, options: ScanOptions) -> int:
+    root = Path(args.folder)
+    if not root.is_dir():
+        raise NotAFolderError(args.folder)
+    prefix = _patch_prefix(root)
+    result = map_sources(root, scan_directory(root, options))
+    plan = plan_fixes(root, result, FixOptions(language=args.lang), path_prefix=prefix)
+    args.output.write_text(plan.patch, encoding="utf-8", newline="")
+    sys.stdout.write(render_fix_summary(result, plan, args.output))
+    return _exit_code(result)
+
+
+def _patch_prefix(root: Path) -> str:
+    try:
+        relative = root.resolve().relative_to(Path.cwd().resolve())
+    except ValueError:
+        raise FolderOutsideError(root) from None
+    return "" if relative == Path() else f"{relative.as_posix()}/"
 
 
 @contextmanager
@@ -97,6 +129,13 @@ def _seconds(value: str) -> float:
     return seconds
 
 
+def _language(value: str) -> str:
+    try:
+        return check_language_tag(value)
+    except ValueError as error:
+        raise argparse.ArgumentTypeError(str(error)) from None
+
+
 class _ArgumentParser(argparse.ArgumentParser):
     @override
     def convert_arg_line_to_args(self, arg_line: str) -> list[str]:
@@ -114,8 +153,21 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--version", action="version", version=f"pataisa {__version__}")
     commands = parser.add_subparsers(dest="command", required=True)
 
+    shared = _ArgumentParser(add_help=False)
+    shared.add_argument(
+        "--timeout",
+        type=_seconds,
+        default=30.0,
+        metavar="SECONDS",
+        help="how long to wait for each page to load, and again for it to be checked (default: 30)",
+    )
+    shared.add_argument(
+        "-q", "--quiet", action="store_true", help="show only warnings and errors, not progress"
+    )
+
     scan = commands.add_parser(
         "scan",
+        parents=[shared],
         help="scan a folder of HTML files or web pages",
         description="Scan a folder of HTML files, or one or more web pages by their URLs.",
     )
@@ -139,14 +191,28 @@ def _parser() -> argparse.ArgumentParser:
         action="store_true",
         help="include each element's HTML in JSON output",
     )
-    scan.add_argument(
-        "--timeout",
-        type=_seconds,
-        default=30.0,
-        metavar="SECONDS",
-        help="how long to wait for each page to load, and again for it to be checked (default: 30)",
+
+    fix = commands.add_parser(
+        "fix",
+        parents=[shared],
+        help="write fixes for a folder of HTML files as a patch",
+        description=(
+            "Scan a folder of HTML files and write a patch that fixes the problems pataisa can "
+            "fix on its own. Your files aren't changed."
+        ),
     )
-    scan.add_argument(
-        "-q", "--quiet", action="store_true", help="show only warnings and errors, not progress"
+    fix.add_argument("folder", help="the folder of HTML files, inside the current folder")
+    fix.add_argument(
+        "--lang",
+        type=_language,
+        metavar="TAG",
+        help="the pages' language, such as en or en-GB; needed to fix a missing page language",
+    )
+    fix.add_argument(
+        "--output",
+        type=Path,
+        default=Path("pataisa.patch"),
+        metavar="FILE",
+        help="where to write the patch (default: pataisa.patch)",
     )
     return parser

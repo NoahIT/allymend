@@ -16,6 +16,19 @@ _HTML_START = re.compile(r"<html(?=[\t\n\f\r />])", re.IGNORECASE)
 _SPACE = "\t\n\f\r "
 
 
+def check_language_tag(value: str) -> str:
+    """Return ``value`` if it has the form of a language tag such as ``en`` or ``en-GB``.
+
+    Only the form is checked, which is enough to keep the value safe inside an attribute.
+
+    Raises:
+        ValueError: ``value`` doesn't have that form.
+    """
+    if not _LANGUAGE.fullmatch(value):
+        raise ValueError(f"{value!r} is not a language tag such as en or en-GB")
+    return value
+
+
 def fix_html_has_lang(text: str, location: SourceLocation, language: str) -> Edit:
     """Give the page's ``html`` element a ``lang`` attribute.
 
@@ -27,8 +40,7 @@ def fix_html_has_lang(text: str, location: SourceLocation, language: str) -> Edi
         CannotFixError: There is no ``html`` start tag at ``location``, or it already has a
             language.
     """
-    if not _LANGUAGE.fullmatch(language):
-        raise ValueError(f"{language!r} is not a language tag such as en or en-GB")
+    check_language_tag(language)
     if not _HTML_START.match(text, location.offset):
         raise CannotFixError(
             f"{location.file} changed after the scan: there is no <html> tag at line "

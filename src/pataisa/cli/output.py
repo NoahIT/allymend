@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from collections import Counter
 from typing import TYPE_CHECKING
 
 from pataisa import __version__
@@ -8,9 +9,11 @@ from pataisa.core.rules import CRITERIA, RULES, Remediability
 from pataisa.core.summary import count_by_rule
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from pydantic.main import IncEx
 
-    from pataisa.core.models import PageResult, ScanResult
+    from pataisa.core.models import FixPlan, PageResult, ScanResult
     from pataisa.core.summary import RuleCount
 
 SCHEMA_VERSION = 1
@@ -75,6 +78,34 @@ def render_markdown(result: ScanResult) -> str:
             for count in count_by_rule(page.occurrences)
         )
     lines.extend(["", _summary(result), "", LIMITS_NOTE])
+    return "\n".join(lines) + "\n"
+
+
+def render_fix_summary(result: ScanResult, plan: FixPlan, patch_file: Path) -> str:
+    """Summarise what a fix run wrote to ``patch_file`` and what it left for a person."""
+    files = {edit.file for fix in plan.fixes for edit in fix.edits}
+    if plan.fixes:
+        lines = [
+            f"Wrote fixes for {_count(len(plan.fixes), 'problem')} in "
+            f"{_count(len(files), 'file')} to {patch_file}.",
+            f"Review it, apply it from this folder with: git apply {patch_file}",
+            "Then scan again to confirm the problems are gone.",
+        ]
+    elif plan.unfixed:
+        lines = [f"Nothing could be fixed automatically, so {patch_file} is empty."]
+    else:
+        lines = [f"No problems found, so {patch_file} is empty."]
+    left = Counter((item.page, item.rule_id, item.reason) for item in plan.unfixed)
+    if left:
+        lines += ["", f"Not fixed ({_count(len(plan.unfixed), 'problem')}):"]
+        for (page, rule_id, reason), elements in left.items():
+            rule = RULES.get(rule_id)
+            name = f"{rule.title} ({rule_id})" if rule is not None else rule_id
+            lines.append(f"  {page}: {name}, {_count(elements, 'element')}: {reason}")
+    failed = [page for page in result.pages if page.error is not None]
+    if failed:
+        lines += ["", "Not scanned:"]
+        lines += [f"  {page.page}: {page.error}" for page in failed]
     return "\n".join(lines) + "\n"
 
 

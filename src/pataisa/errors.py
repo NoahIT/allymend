@@ -28,6 +28,25 @@ class MixedTargetsError(PataisaError):
         super().__init__("scan either one folder or one or more URLs, not both")
 
 
+class NotAFolderError(PataisaError):
+    """A command that needs the site's source files was given something other than a folder."""
+
+    def __init__(self, target: str) -> None:
+        super().__init__(f"{target} is not a folder; fixes need the site's source files")
+        self.target = target
+
+
+class FolderOutsideError(PataisaError):
+    """The folder to fix lies outside the current folder, so a patch can't be applied from here."""
+
+    def __init__(self, folder: Path) -> None:
+        super().__init__(
+            f"{folder} is outside the current folder; run pataisa fix from a folder that "
+            "contains it, so the patch applies from there"
+        )
+        self.folder = folder
+
+
 class InvalidURLError(PataisaError):
     """The URL to scan is not an http or https address."""
 

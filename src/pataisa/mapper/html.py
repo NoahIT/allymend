@@ -6,11 +6,12 @@ from typing import TYPE_CHECKING
 from justhtml import JustHTML, SelectorError
 
 from pataisa.core.models import Occurrence, PageResult, ScanResult, SourceLocation
+from pataisa.files import read_source
 
 if TYPE_CHECKING:
     from pathlib import Path
 
-_BYTE_ORDER_MARK = "﻿"
+_BYTE_ORDER_MARK = "\ufeff"
 _TAG_NAME = re.compile(r"<([A-Za-z][A-Za-z0-9-]*)")
 
 
@@ -59,23 +60,12 @@ def map_sources(root: Path, result: ScanResult) -> ScanResult:
 def _map_page(root: Path, page: PageResult) -> PageResult:
     if not page.occurrences:
         return page
-    text = _read(root, page.page)
+    text = read_source(root, page.page)
     if text is None:
         return page
     source = HtmlSource(text, page.page)
     located = tuple(o.model_copy(update={"source": source.locate(o)}) for o in page.occurrences)
     return page.model_copy(update={"occurrences": located})
-
-
-def _read(root: Path, relative: str) -> str | None:
-    base = root.resolve()
-    path = (base / relative).resolve()
-    if not path.is_relative_to(base):
-        return None
-    try:
-        return path.read_bytes().decode("utf-8")
-    except (OSError, UnicodeDecodeError):
-        return None
 
 
 def _tag_name(html: str) -> str | None:
