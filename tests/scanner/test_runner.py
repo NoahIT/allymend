@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from pataisa.errors import BrowserNotInstalledError
-from pataisa.scanner import ScanOptions, scan_directory, scan_url, scan_urls
+from pataisa.scanner import ScanOptions, open_browser, scan_directory, scan_url, scan_urls
 from pataisa.scanner.site import serve
 
 pytestmark = pytest.mark.browser
@@ -162,6 +162,60 @@ def test_reports_a_page_that_replaces_axe(
     [page] = scan_directory(tmp_path).pages
     assert page.error == error
     assert page.occurrences == ()
+
+
+def test_a_session_checks_replacement_content_with_the_folder_s_styles(
+    tmp_path: Path, write_page: Callable[..., Path]
+) -> None:
+    (tmp_path / "style.css").write_text("p { color: #ddd; background: #fff; }", encoding="utf-8")
+    path = write_page(
+        "index.html", '<link rel="stylesheet" href="style.css"><p>Sale</p>', lang=None
+    )
+    patched = path.read_text(encoding="utf-8").replace("<html>", '<html lang="en">')
+
+    with serve(tmp_path) as base_url, open_browser() as browser:
+        url = f"{base_url}index.html"
+        before = browser.scan("index.html", url).result
+        after = browser.scan("index.html", url, html=patched).result
+
+    assert sorted(o.rule_id for o in before.occurrences) == ["color-contrast", "html-has-lang"]
+    assert [o.rule_id for o in after.occurrences] == ["color-contrast"]
+
+
+def test_a_session_captures_the_accessibility_tree_when_asked(
+    tmp_path: Path, write_page: Callable[..., Path]
+) -> None:
+    write_page("index.html", f'<img src="{PIXEL}" alt="Mug">')
+    with serve(tmp_path) as base_url, open_browser() as browser:
+        url = f"{base_url}index.html"
+        plain = browser.scan("index.html", url)
+        with_tree = browser.scan("index.html", url, tree=True)
+    assert plain.tree is None
+    assert with_tree.tree is not None
+    assert '- heading "Test page" [level=1]' in with_tree.tree
+    assert '- img "Mug"' in with_tree.tree
+
+
+def test_a_session_reports_replacement_content_it_could_not_use(
+    tmp_path: Path, write_page: Callable[..., Path]
+) -> None:
+    write_page("index.html")
+    with serve(tmp_path) as base_url, open_browser() as browser:
+        scan = browser.scan("index.html", f"{base_url}./index.html", html="<p>Patched</p>")
+    assert scan.result.error == "the replacement content wasn't loaded"
+
+
+def test_a_session_gives_up_on_a_frozen_page_while_reading_its_tree(
+    tmp_path: Path, write_page: Callable[..., Path]
+) -> None:
+    write_page(
+        "index.html",
+        "<script>addEventListener('load', () => setTimeout(() => { for (;;) {} }, 0));</script>",
+    )
+    with serve(tmp_path) as base_url, open_browser(ScanOptions(timeout_ms=2000)) as browser:
+        scan = browser.scan("index.html", f"{base_url}index.html", tree=True)
+    assert scan.result.error == "did not finish within 2 s"
+    assert scan.tree is None
 
 
 def test_reports_a_missing_browser(
