@@ -1,0 +1,146 @@
+from pathlib import Path
+
+import pytest
+
+from pataisa.core.models import Impact, Occurrence, PageResult, ScanResult, SourceLocation
+from pataisa.mapper import HtmlSource, map_sources
+
+PAGE = (
+    "<!doctype html>\n"
+    '<html lang="en">\n'
+    '<head><meta name="viewport" content="width=device-width"><title>Shop</title></head>\n'
+    "<body>\n"
+    '<main><h1>Shop</h1><img src="mug.jpg"></main>\n'
+    "</body>\n"
+    "</html>\n"
+)
+
+
+def occurrence(
+    target: str | tuple[str, ...] = "img", html: str = '<img src="mug.jpg">'
+) -> Occurrence:
+    return Occurrence(
+        rule_id="image-alt",
+        impact=Impact.CRITICAL,
+        wcag=("1.1.1",),
+        summary="Images must have alternative text",
+        help_url="https://dequeuniversity.com/rules/axe/4.13/image-alt",
+        target=(target,) if isinstance(target, str) else target,
+        html=html,
+        failure_summary="",
+    )
+
+
+def locate(
+    text: str, target: str | tuple[str, ...] = "img", html: str = "<img>"
+) -> SourceLocation | None:
+    return HtmlSource(text, "index.html").locate(occurrence(target, html))
+
+
+def test_finds_the_start_tag_of_the_element() -> None:
+    assert locate(PAGE) == SourceLocation(
+        file="index.html", line=5, column=20, offset=PAGE.index("<img")
+    )
+
+
+@pytest.mark.parametrize("newline", ["\n", "\r\n"], ids=["lf", "crlf"])
+def test_offset_points_at_the_tag_whatever_the_line_endings(newline: str) -> None:
+    text = PAGE.replace("\n", newline)
+    location = locate(text)
+    assert location is not None
+    assert location.line == 5
+    assert text[location.offset : location.offset + 4] == "<img"
+
+
+def test_offset_counts_a_byte_order_mark() -> None:
+    text = "﻿" + PAGE
+    location = locate(text)
+    assert location is not None
+    assert text[location.offset : location.offset + 4] == "<img"
+
+
+def test_offset_counts_characters_not_bytes() -> None:
+    text = PAGE.replace("<h1>Shop</h1>", "<h1>Žąsų parduotuvė 🙂</h1>")
+    location = locate(text)
+    assert location is not None
+    assert text[location.offset : location.offset + 4] == "<img"
+
+
+def test_finds_elements_in_the_head() -> None:
+    location = locate(PAGE, 'meta[name="viewport"]', '<meta name="viewport">')
+    assert location is not None
+    assert (location.line, PAGE[location.offset : location.offset + 5]) == (3, "<meta")
+
+
+def test_elements_the_parser_inserts_have_no_location() -> None:
+    text = "<table><tr><td>Price</td></tr></table>"
+    assert locate(text, "tbody", "<tbody>") is None
+    assert locate(text, "td", "<td>") is not None
+
+
+@pytest.mark.parametrize(
+    ("target", "html"),
+    [
+        ("video", "<video>"),
+        ("p", "<p>"),
+        (("iframe", "img"), "<img>"),
+        ("img", '<input type="image">'),
+        ("img", "not markup"),
+        ("#\\31 23", "<img>"),
+    ],
+    ids=["no-match", "several-matches", "inside-a-frame", "different-tag", "no-tag", "unsupported"],
+)
+def test_no_location_unless_the_match_is_certain(target: str | tuple[str, ...], html: str) -> None:
+    text = "<p>One</p><p>Two</p><img src='a.png'>"
+    assert locate(text, target, html) is None
+
+
+def write(root: Path, relative: str, data: bytes) -> None:
+    path = root / relative
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(data)
+
+
+def scan(*pages: PageResult) -> ScanResult:
+    return ScanResult(axe_version="4.13.0", pages=pages)
+
+
+def test_map_sources_reads_each_page_from_the_folder(tmp_path: Path) -> None:
+    write(tmp_path, "shop/index.html", PAGE.encode("utf-8"))
+    result = scan(PageResult(page="shop/index.html", occurrences=(occurrence(),)))
+
+    [page] = map_sources(tmp_path, result).pages
+
+    [mapped] = page.occurrences
+    assert mapped.source == SourceLocation(
+        file="shop/index.html", line=5, column=20, offset=PAGE.index("<img")
+    )
+
+
+def test_map_sources_leaves_pages_without_problems_alone(tmp_path: Path) -> None:
+    clean = PageResult(page="about.html")
+    failed = PageResult(page="missing.html", error="HTTP 404")
+    assert map_sources(tmp_path, scan(clean, failed)).pages == (clean, failed)
+
+
+@pytest.mark.parametrize(
+    ("relative", "data"),
+    [
+        ("index.html", "<img src='a.png'>".encode("utf-16")),
+        ("missing.html", None),
+        ("../outside.html", b"<img src='a.png'>"),
+    ],
+    ids=["not-utf8", "missing-file", "outside-the-folder"],
+)
+def test_map_sources_skips_files_it_cannot_safely_read(
+    tmp_path: Path, relative: str, data: bytes | None
+) -> None:
+    root = tmp_path / "site"
+    root.mkdir()
+    if data is not None:
+        write(root, relative, data)
+    result = scan(PageResult(page=relative, occurrences=(occurrence(),)))
+
+    [page] = map_sources(root, result).pages
+
+    assert page.occurrences[0].source is None
