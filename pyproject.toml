@@ -13,6 +13,9 @@ dependencies = [
     "pydantic (>=2.13,<3)"
 ]
 
+[project.scripts]
+pataisa = "pataisa.cli:main"
+
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]

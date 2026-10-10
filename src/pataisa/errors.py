@@ -13,6 +13,14 @@ class NoPagesError(PataisaError):
         self.root = root
 
 
+class UnknownTargetError(PataisaError):
+    """The scan target is neither a folder nor an http or https URL."""
+
+    def __init__(self, target: str) -> None:
+        super().__init__(f"{target} is neither a folder nor an http or https URL")
+        self.target = target
+
+
 class InvalidURLError(PataisaError):
     """The URL to scan is not an http or https address."""
 

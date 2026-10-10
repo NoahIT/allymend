@@ -25,6 +25,21 @@ Early development. Nothing is usable yet. The first release, 0.1.0, will cover s
 - Patch pages in the browser at runtime. Pataisa is not an overlay; it changes source code.
 - Invent content. Alt text, link names and similar text need your judgment, so those findings are marked as needing a person.
 
+## Trying it
+
+Scanning works today. Fixes don't exist yet.
+
+```
+poetry install
+poetry run playwright install chromium
+poetry run pataisa scan path/to/site
+poetry run pataisa scan https://www.w3.org/WAI/demos/bad/before/home.html
+```
+
+A folder is served locally and every HTML file in it is scanned. A URL scans that one page. Add `--format json` for machine-readable output.
+
+The exit code is 0 when nothing was found, 1 when problems were found, and 2 when a page couldn't be scanned.
+
 ## Development
 
 You need Python 3.12 or newer, [Poetry](https://python-poetry.org/) 2.x and GNU Make.
