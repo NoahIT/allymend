@@ -1,11 +1,12 @@
 .DEFAULT_GOAL := help
-.PHONY: help install format lint test
+.PHONY: help install format lint test live
 
 help:
 	@echo install - install dependencies and git hooks
 	@echo format  - format code and apply safe lint fixes
 	@echo lint    - check formatting, lint rules and types
 	@echo test    - run tests with coverage
+	@echo live    - scan the public pages in live/targets.txt
 
 install:
 	poetry sync
@@ -22,3 +23,6 @@ lint:
 
 test:
 	poetry run pytest --cov
+
+live:
+	-poetry run pataisa scan --format markdown --output live/report.md @live/targets.txt

@@ -1,0 +1,8 @@
+https://www.w3.org/WAI/demos/bad/before/home.html
+https://www.w3.org/WAI/demos/bad/before/news.html
+https://www.w3.org/WAI/demos/bad/before/tickets.html
+https://www.w3.org/WAI/demos/bad/before/survey.html
+https://www.w3.org/WAI/demos/bad/after/home.html
+https://www.w3.org/WAI/demos/bad/after/news.html
+https://www.w3.org/WAI/demos/bad/after/tickets.html
+https://www.w3.org/WAI/demos/bad/after/survey.html

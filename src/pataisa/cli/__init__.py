@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 import sys
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, override
 
 from pataisa import __version__
 from pataisa.cli.output import render_json, render_markdown, render_text
@@ -75,9 +75,19 @@ def _seconds(value: str) -> float:
     return seconds
 
 
+class _ArgumentParser(argparse.ArgumentParser):
+    @override
+    def convert_arg_line_to_args(self, arg_line: str) -> list[str]:
+        line = arg_line.strip()
+        return [] if not line or line.startswith("#") else [line]
+
+
 def _parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        prog="pataisa", description="Find accessibility problems in web pages."
+    parser = _ArgumentParser(
+        prog="pataisa",
+        description="Find accessibility problems in web pages.",
+        epilog="Arguments can be read from a file, one per line: pataisa scan @targets.txt",
+        fromfile_prefix_chars="@",
     )
     parser.add_argument("--version", action="version", version=f"pataisa {__version__}")
     commands = parser.add_subparsers(dest="command", required=True)
@@ -91,7 +101,7 @@ def _parser() -> argparse.ArgumentParser:
         "targets",
         nargs="+",
         metavar="target",
-        help="a folder of HTML files, or one or more http or https URLs",
+        help="a folder of HTML files, or one or more URLs (@FILE reads them from a file)",
     )
     scan.add_argument(
         "--format",

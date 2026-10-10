@@ -13,6 +13,8 @@ dist/
 coverage.xml
 htmlcov/
 
+live/report.md
+
 .env
 .env.*
 !.env.example

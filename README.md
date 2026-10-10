@@ -38,6 +38,8 @@ poetry run pataisa scan https://www.w3.org/WAI/demos/bad/before/home.html
 
 A folder is served locally and every HTML file in it is scanned. You can also give one or more URLs, and each of those pages is scanned. Add `--format json` for machine-readable output, or `--format markdown` for a report grouped by rule.
 
+To scan a list of pages, put one URL per line in a file and pass it with `@`, for example `poetry run pataisa scan @live/targets.txt`.
+
 The exit code is 0 when nothing was found, 1 when problems were found, and 2 when a page couldn't be scanned.
 
 ## Development
@@ -48,7 +50,10 @@ You need Python 3.12 or newer, [Poetry](https://python-poetry.org/) 2.x and GNU 
 make install    # dependencies and git hooks
 make lint       # formatting, lint rules and types
 make test       # tests with coverage
+make live       # scan the public pages in live/targets.txt into live/report.md
 ```
+
+The same scan can be started by hand from GitHub's Actions tab ("Live scan"). Its report appears on the run's summary page.
 
 ## License
 

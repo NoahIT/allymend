@@ -56,6 +56,17 @@ def test_scans_either_one_folder_or_urls(
     )
 
 
+def test_reads_targets_from_a_file_and_skips_comments_and_blank_lines(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    targets = tmp_path / "targets.txt"
+    targets.write_text("# public pages\n\n  missing-folder  \n", encoding="utf-8")
+    assert main(["scan", f"@{targets}"]) == EXIT_ERROR
+    assert capsys.readouterr().err == (
+        "pataisa: missing-folder is neither a folder nor an http or https URL\n"
+    )
+
+
 def test_reports_a_folder_without_html_files(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
