@@ -9,6 +9,8 @@ license = "Apache-2.0"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "playwright (>=1.63,<2)",
+    "pydantic (>=2.13,<3)"
 ]
 
 
@@ -46,10 +48,14 @@ ignore = [
 [tool.ruff.lint.pydocstyle]
 convention = "google"
 
+[tool.ruff.lint.flake8-type-checking]
+runtime-evaluated-base-classes = ["pydantic.BaseModel"]
+
 [tool.mypy]
 python_version = "3.12"
 strict = true
 files = ["src", "tests"]
+plugins = ["pydantic.mypy"]
 warn_unreachable = true
 enable_error_code = [
     "deprecated",
@@ -60,12 +66,18 @@ enable_error_code = [
     "truthy-bool",
 ]
 
+[tool.pydantic-mypy]
+init_forbid_extra = true
+init_typed = true
+warn_required_dynamic_aliases = true
+
 [tool.pytest.ini_options]
 minversion = "9.0"
 testpaths = ["tests"]
 addopts = ["--import-mode=importlib", "--strict-config", "--strict-markers", "-ra"]
 xfail_strict = true
 filterwarnings = ["error"]
+markers = ["browser: needs the Chromium build installed by Playwright"]
 
 [tool.coverage.run]
 branch = true

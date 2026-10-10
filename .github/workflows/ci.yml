@@ -49,6 +49,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
           cache: poetry
       - run: poetry sync --no-interaction
+      - run: poetry run playwright install --with-deps chromium
       - run: make test
 
   secrets:
