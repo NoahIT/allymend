@@ -43,6 +43,14 @@ class AxeResultError(PataisaError):
         super().__init__("axe-core returned results in an unexpected format")
 
 
+class CannotFixError(PataisaError):
+    """A problem can't be fixed automatically where it was found in the source."""
+
+    def __init__(self, reason: str) -> None:
+        super().__init__(reason)
+        self.reason = reason
+
+
 class BrowserNotInstalledError(PataisaError):
     """Playwright's Chromium build is missing."""
 
