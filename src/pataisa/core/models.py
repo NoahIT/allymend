@@ -33,6 +33,22 @@ class SourceLocation(_Model):
     offset: int
 
 
+class Edit(_Model):
+    """A change to one span of a source file.
+
+    Attributes:
+        file: The file's path relative to the scanned folder, with forward slashes.
+        start: Where the replaced span starts, counted like ``SourceLocation.offset``.
+        end: Where the replaced span ends. Equal to ``start`` for an insertion.
+        text: The text that replaces the span.
+    """
+
+    file: str
+    start: int
+    end: int
+    text: str
+
+
 class Occurrence(_Model):
     """One element on one page that fails one rule.
 
