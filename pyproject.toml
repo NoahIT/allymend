@@ -15,3 +15,63 @@ dependencies = [
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
 build-backend = "poetry.core.masonry.api"
+
+[dependency-groups]
+dev = [
+    "ruff (==0.16.9)",
+    "mypy (==2.3.1)",
+    "pytest (==9.1.1)",
+    "pytest-cov (==7.1.0)",
+    "pre-commit (==4.6.2)"
+]
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = [
+    "A", "ARG", "B", "BLE", "C4", "D", "DTZ", "E", "ERA", "F", "FURB", "G", "I", "LOG",
+    "N", "PERF", "PL", "PT", "PTH", "RET", "RUF", "S", "SIM", "T20", "TC", "TRY", "UP", "W",
+]
+ignore = [
+    # Docstrings are required on public functions and classes, not on every module.
+    "D100", "D104", "D105", "D107",
+    # Exceptions carry structured context instead of being raised with message strings.
+    "TRY003",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["D", "PLR2004", "S101"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+files = ["src", "tests"]
+warn_unreachable = true
+enable_error_code = [
+    "deprecated",
+    "explicit-override",
+    "ignore-without-code",
+    "possibly-undefined",
+    "redundant-expr",
+    "truthy-bool",
+]
+
+[tool.pytest.ini_options]
+minversion = "9.0"
+testpaths = ["tests"]
+addopts = ["--import-mode=importlib", "--strict-config", "--strict-markers", "-ra"]
+xfail_strict = true
+filterwarnings = ["error"]
+
+[tool.coverage.run]
+branch = true
+source_pkgs = ["pataisa"]
+
+[tool.coverage.report]
+fail_under = 90
+show_missing = true
+skip_covered = true
