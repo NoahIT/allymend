@@ -1,1 +1,3 @@
 * text=auto eol=lf
+
+src/pataisa/_vendor/** -text linguist-vendored

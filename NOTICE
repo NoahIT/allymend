@@ -1,2 +1,6 @@
 pataisa
 Copyright 2026 Nojus Raščius
+
+This product includes axe-core 4.13.0 (https://github.com/dequelabs/axe-core),
+Copyright (c) 2015 - 2026 Deque Systems, Inc., licensed under the Mozilla Public
+License 2.0. The unmodified file and its license are in src/pataisa/_vendor/axe-core/.
