@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, override
 from pataisa import __version__
 from pataisa.cli.output import render_json, render_markdown, render_text
 from pataisa.errors import MixedTargetsError, PataisaError, UnknownTargetError
+from pataisa.mapper import map_sources
 from pataisa.scanner import ScanOptions, scan_directory, scan_urls
 
 if TYPE_CHECKING:
@@ -56,7 +57,8 @@ def _scan(targets: Sequence[str], options: ScanOptions) -> ScanResult:
         return scan_urls(targets, options)
     if len(targets) > 1:
         raise MixedTargetsError
-    return scan_directory(Path(folders[0]), options)
+    root = Path(folders[0])
+    return map_sources(root, scan_directory(root, options))
 
 
 def _exit_code(result: ScanResult) -> int:

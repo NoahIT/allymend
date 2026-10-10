@@ -26,6 +26,14 @@ def test_reports_problems_and_exits_with_1(
     assert "Summary: 1 problem on 1 of 2 pages." in lines
 
 
+def test_folder_scan_shows_source_lines(
+    tmp_path: Path, write_page: Callable[..., Path], capsys: pytest.CaptureFixture[str]
+) -> None:
+    write_page("index.html", lang=None)
+    assert main(["scan", str(tmp_path)]) == EXIT_PROBLEMS
+    assert "     Elements: line 1, column 16" in capsys.readouterr().out.splitlines()
+
+
 def test_clean_folder_exits_with_0(
     tmp_path: Path, write_page: Callable[..., Path], capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -59,7 +67,7 @@ def test_writes_markdown(
     lines = capsys.readouterr().out.splitlines()
     assert lines[0] == "# Accessibility scan"
     assert "| index.html | 1 | html-has-lang (1) |" in lines
-    assert "| Page language is not set | html-has-lang | auto | serious | 3.1.1 | 1 |" in lines
+    assert "| Page language is not set | html-has-lang | auto | serious | 3.1.1 | 1 | 1 |" in lines
 
 
 def test_scans_several_urls(

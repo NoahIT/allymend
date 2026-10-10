@@ -2,7 +2,7 @@ import json
 
 from pataisa import __version__
 from pataisa.cli.output import LIMITS_NOTE, render_json, render_markdown, render_text
-from pataisa.core.models import Impact, Occurrence, PageResult, ScanResult
+from pataisa.core.models import Impact, Occurrence, PageResult, ScanResult, SourceLocation
 from pataisa.core.rules import RULES
 
 MISSING_ALT = Occurrence(
@@ -83,9 +83,31 @@ def test_text_lists_five_elements_then_how_many_more() -> None:
     lines = render_text(single_page(*images)).splitlines()
     assert "  1. Image has no text alternative (7 elements)" in lines
     assert (
-        "     Elements: li:nth-child(1) > img, li:nth-child(2) > img, li:nth-child(3) > img, "
-        "li:nth-child(4) > img, li:nth-child(5) > img, and 2 more"
+        "     Elements: li:nth-child(1) > img; li:nth-child(2) > img; li:nth-child(3) > img; "
+        "li:nth-child(4) > img; li:nth-child(5) > img; and 2 more"
     ) in lines
+
+
+def test_text_shows_source_lines_for_elements_traced_to_the_source() -> None:
+    traced = MISSING_ALT.model_copy(
+        update={"source": SourceLocation(file="index.html", line=12, column=5, offset=301)}
+    )
+    lines = render_text(single_page(traced, MISSING_ALT)).splitlines()
+    assert "     Elements: line 12, column 5; main > img" in lines
+
+
+def test_markdown_adds_a_lines_column_only_when_elements_were_traced() -> None:
+    traced = MISSING_ALT.model_copy(
+        update={"source": SourceLocation(file="index.html", line=12, column=5, offset=301)}
+    )
+    with_lines = render_markdown(single_page(traced, MISSING_ALT)).splitlines()
+    assert "| Problem | Rule | Fix type | Impact | WCAG | Elements | Lines |" in with_lines
+    assert (
+        "| Image has no text alternative | image-alt | human | critical | 1.1.1 | 2 | 12 |"
+        in with_lines
+    )
+    without_lines = render_markdown(single_page(MISSING_ALT)).splitlines()
+    assert "| Problem | Rule | Fix type | Impact | WCAG | Elements |" in without_lines
 
 
 def test_text_falls_back_to_axe_for_rules_outside_the_catalog() -> None:

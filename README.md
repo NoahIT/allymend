@@ -36,7 +36,7 @@ poetry run pataisa scan path/to/site
 poetry run pataisa scan https://www.w3.org/WAI/demos/bad/before/home.html
 ```
 
-A folder is served locally and every HTML file in it is scanned. You can also give one or more URLs, and each of those pages is scanned. Add `--format json` for machine-readable output, or `--format markdown` for a report grouped by rule.
+A folder is served locally and every HTML file in it is scanned, and each problem is traced to the line in your file that produces it. You can also give one or more URLs, and each of those pages is scanned. Add `--format json` for machine-readable output, or `--format markdown` for a report grouped by rule.
 
 To scan a list of pages, put one URL per line in a file and pass it with `@`, for example `poetry run pataisa scan @live/targets.txt`.
 

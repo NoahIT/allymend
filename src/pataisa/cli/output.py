@@ -63,16 +63,17 @@ def render_markdown(result: ScanResult) -> str:
     for page in result.pages:
         if not page.occurrences:
             continue
+        mapped = any(occurrence.source is not None for occurrence in page.occurrences)
+        header = "| Problem | Rule | Fix type | Impact | WCAG | Elements |"
+        divider = "| --- | --- | --- | --- | --- | ---: |"
+        if mapped:
+            header += " Lines |"
+            divider += " --- |"
+        lines.extend(["", f"## {_escape(page.page)}", "", header, divider])
         lines.extend(
-            [
-                "",
-                f"## {_escape(page.page)}",
-                "",
-                "| Problem | Rule | Fix type | Impact | WCAG | Elements |",
-                "| --- | --- | --- | --- | --- | ---: |",
-            ]
+            _markdown_rule_row(count, with_lines=mapped)
+            for count in count_by_rule(page.occurrences)
         )
-        lines.extend(_markdown_rule_row(count) for count in count_by_rule(page.occurrences))
     lines.extend(["", _summary(result), "", LIMITS_NOTE])
     return "\n".join(lines) + "\n"
 
@@ -85,14 +86,23 @@ def _overview_row(page: PageResult) -> str:
     return f"| {_escape(page.page)} | {len(page.occurrences)} | {rules} |"
 
 
-def _markdown_rule_row(count: RuleCount) -> str:
+def _markdown_rule_row(count: RuleCount, *, with_lines: bool) -> str:
     rule = RULES.get(count.rule_id)
     title = rule.title if rule is not None else count.summary
     fix_type = rule.remediability if rule is not None else ""
-    return (
+    row = (
         f"| {_escape(title)} | {count.rule_id} | {fix_type} | {count.impact or ''} | "
         f"{', '.join(count.wcag)} | {count.elements} |"
     )
+    if with_lines:
+        row += f" {_shortened([str(s.line) for s in count.sources if s is not None])} |"
+    return row
+
+
+def _shortened(items: list[str], separator: str = ", ") -> str:
+    hidden = len(items) - _SHOWN_ELEMENTS
+    shown = separator.join(items[:_SHOWN_ELEMENTS])
+    return shown + (f"{separator}and {hidden} more" if hidden > 0 else "")
 
 
 def _escape(text: str) -> str:
@@ -134,9 +144,11 @@ def _rule_lines(number: int, count: RuleCount) -> list[str]:
     lines.extend(f"     {_criterion(criterion)}" for criterion in count.wcag)
     impact = f", impact {count.impact}" if count.impact is not None else ""
     lines.append(f"     axe-core rule {count.rule_id}{impact}")
-    hidden = count.elements - _SHOWN_ELEMENTS
-    shown = ", ".join(count.targets[:_SHOWN_ELEMENTS])
-    lines.append(f"     Elements: {shown}" + (f", and {hidden} more" if hidden > 0 else ""))
+    elements = [
+        target if source is None else f"line {source.line}, column {source.column}"
+        for target, source in zip(count.targets, count.sources, strict=True)
+    ]
+    lines.append(f"     Elements: {_shortened(elements, '; ')}")
     return lines
 
 

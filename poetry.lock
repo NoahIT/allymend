@@ -383,6 +383,22 @@ files = [
 ]
 
 [[package]]
+name = "justhtml"
+version = "3.11.2"
+description = "A pure Python HTML5 parser that just works."
+optional = false
+python-versions = ">=3.10"
+groups = ["main"]
+files = [
+    {file = "justhtml-3.11.2-py3-none-any.whl", hash = "sha256:366986de83fab5f7ab643f79ffb3ad44dbaeb63f34b6361b955930575417cdd2"},
+    {file = "justhtml-3.11.2.tar.gz", hash = "sha256:83329a7436620a79ebd0b7310b5e4d653fa0688cd315e7a92d2188febd0d6ab0"},
+]
+
+[package.extras]
+benchmark = ["beautifulsoup4 (>=4.14.3)", "html5-parser (>=0.4.12)", "html5lib (>=1.1)", "lxml (>=6.1.1)", "markupever (>=0.3.4)", "selectolax (>=0.4.11)", "turbohtml (>=1.4.0)", "zstandard (>=0.25.0)"]
+dev = ["build", "coverage", "mypy (>=1.0) ; platform_python_implementation != \"PyPy\"", "pre-commit", "ruff (==0.14.7)", "twine"]
+
+[[package]]
 name = "librt"
 version = "0.15.0"
 description = "Mypyc runtime library"
@@ -1138,4 +1154,4 @@ python-discovery = ">=1.6"
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.12"
-content-hash = "ed2b007826247aa18910eb5d6f23d5e6ec4f00c86abf20b9c3bad7ede36d0527"
+content-hash = "9e136cd23e00e81469eba7c57c346f20eadd5d24cabe483bc3d2533c1b2eb55e"

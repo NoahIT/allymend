@@ -10,7 +10,8 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "playwright (>=1.63,<2)",
-    "pydantic (>=2.13,<3)"
+    "pydantic (>=2.13,<3)",
+    "justhtml (>=3.11,<4)"
 ]
 
 [project.scripts]

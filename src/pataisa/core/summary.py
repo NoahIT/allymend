@@ -1,7 +1,7 @@
 from collections.abc import Iterable
 from dataclasses import dataclass
 
-from pataisa.core.models import Impact, Occurrence
+from pataisa.core.models import Impact, Occurrence, SourceLocation
 
 _SEVERITY = {Impact.MINOR: 1, Impact.MODERATE: 2, Impact.SERIOUS: 3, Impact.CRITICAL: 4}
 
@@ -16,6 +16,7 @@ class RuleCount:
     impact: Impact | None
     wcag: tuple[str, ...]
     targets: tuple[str, ...]
+    sources: tuple[SourceLocation | None, ...]
 
     @property
     def elements(self) -> int:
@@ -39,6 +40,7 @@ def count_by_rule(occurrences: Iterable[Occurrence]) -> tuple[RuleCount, ...]:
             impact=_most_severe(members),
             wcag=members[0].wcag,
             targets=tuple(" >> ".join(member.target) for member in members),
+            sources=tuple(member.source for member in members),
         )
         for rule_id, members in groups.items()
     )

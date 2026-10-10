@@ -49,6 +49,7 @@ def test_keeps_the_rule_details_and_each_element() -> None:
             impact=Impact.SERIOUS,
             wcag=("1.1.1",),
             targets=("img", "x-card >> img"),
+            sources=(None, None),
         ),
     )
 
