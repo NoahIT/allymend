@@ -62,12 +62,23 @@ def test_plans_a_fix_and_a_patch(tmp_path: Path) -> None:
 
     [fix] = plan.fixes
     insert_at = PAGE.index("<html") + len("<html")
-    assert (fix.rule_id, fix.page) == ("html-has-lang", "index.html")
+    assert (fix.rule_id, fix.page, fix.target) == ("html-has-lang", "index.html", ("html",))
     assert fix.edits == (
         Edit(file="index.html", start=insert_at, end=insert_at, text=' lang="en"'),
     )
     assert plan.unfixed == ()
-    assert plan.patch == unified_diff("site/index.html", PAGE, FIXED)
+    [change] = plan.changes
+    assert (change.file, change.before, change.after) == ("index.html", PAGE, FIXED)
+    assert change.diff == plan.patch == unified_diff("site/index.html", PAGE, FIXED)
+
+
+def test_serialized_plans_leave_out_the_file_texts(tmp_path: Path) -> None:
+    write(tmp_path, "index.html")
+    plan = plan_fixes(tmp_path, scan(problem(source=location())), FixOptions(language="en"))
+    [change] = plan.model_dump(mode="json")["changes"]
+    assert set(change) == {"file", "diff"}
+    assert "before=" not in repr(plan.changes)
+    assert "after=" not in repr(plan.changes)
 
 
 def test_leaves_a_missing_language_alone_when_none_was_given(tmp_path: Path) -> None:

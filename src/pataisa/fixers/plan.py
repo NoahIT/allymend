@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from types import MappingProxyType
 from typing import TYPE_CHECKING
 
-from pataisa.core.models import Fix, FixPlan, Unfixed
+from pataisa.core.models import FileChange, Fix, FixPlan, Unfixed
 from pataisa.errors import CannotFixError
 from pataisa.files import read_source
 from pataisa.fixers.edits import apply_edits, unified_diff
@@ -43,8 +43,8 @@ def plan_fixes(
 
     The scan must have been through ``map_sources``, so occurrences carry source locations.
     Each source file is read once, and each fix is checked against the others planned for the
-    same file. Nothing is written. The patch's paths are relative to ``root``, with
-    ``path_prefix`` in front so that it can be applied from another folder.
+    same file. Nothing is written. The diffs' paths are relative to ``root``, with
+    ``path_prefix`` in front so that the patch can be applied from another folder.
     """
     planner = _Planner(root, options or FixOptions())
     fixes: list[Fix] = []
@@ -62,7 +62,7 @@ def plan_fixes(
                         reason=error.reason,
                     )
                 )
-    return FixPlan(fixes=tuple(fixes), unfixed=tuple(unfixed), patch=planner.patch(path_prefix))
+    return FixPlan(fixes=tuple(fixes), unfixed=tuple(unfixed), changes=planner.changes(path_prefix))
 
 
 def _page_language(text: str, location: SourceLocation, options: FixOptions) -> Edit:
@@ -98,16 +98,16 @@ class _Planner:
         except ValueError:
             raise CannotFixError("it overlaps another fix in the same file") from None
         self._edits[location.file] = [*planned, edit]
-        return Fix(rule_id=occurrence.rule_id, page=page, edits=(edit,))
+        return Fix(rule_id=occurrence.rule_id, page=page, target=occurrence.target, edits=(edit,))
 
-    def patch(self, path_prefix: str) -> str:
-        diffs = []
+    def changes(self, path_prefix: str) -> tuple[FileChange, ...]:
+        changes = []
         for file in sorted(self._edits):
-            text = self._text(file)
-            diffs.append(
-                unified_diff(path_prefix + file, text, apply_edits(text, self._edits[file]))
-            )
-        return "".join(diffs)
+            before = self._text(file)
+            after = apply_edits(before, self._edits[file])
+            diff = unified_diff(path_prefix + file, before, after)
+            changes.append(FileChange(file=file, diff=diff, before=before, after=after))
+        return tuple(changes)
 
     def _text(self, file: str) -> str:
         if file not in self._texts:

@@ -12,7 +12,7 @@ def result(*pages: PageResult) -> ScanResult:
 
 def fix(page: str) -> Fix:
     edit = Edit(file=page, start=5, end=5, text=' lang="en"')
-    return Fix(rule_id="html-has-lang", page=page, edits=(edit,))
+    return Fix(rule_id="html-has-lang", page=page, target=("html",), edits=(edit,))
 
 
 def left(page: str, rule_id: str, target: str, reason: str) -> Unfixed:
@@ -31,7 +31,7 @@ def test_lists_what_was_fixed_and_what_was_left() -> None:
             ),
             left("index.html", "duplicate-id", "#a", "there's no automatic fix for this rule yet"),
         ),
-        patch="...",
+        changes=(),
     )
     scanned = result(PageResult(page="shop.html", error="HTTP 404"))
 
@@ -54,7 +54,7 @@ def test_says_when_nothing_could_be_fixed() -> None:
     plan = FixPlan(
         fixes=(),
         unfixed=(left("index.html", "html-has-lang", "html", "the pages' language wasn't given"),),
-        patch="",
+        changes=(),
     )
     assert render_fix_summary(result(), plan, PATCH).splitlines()[0] == (
         "Nothing could be fixed automatically, so pataisa.patch is empty."
@@ -62,7 +62,7 @@ def test_says_when_nothing_could_be_fixed() -> None:
 
 
 def test_says_when_there_was_nothing_to_fix() -> None:
-    plan = FixPlan(fixes=(), unfixed=(), patch="")
+    plan = FixPlan(fixes=(), unfixed=(), changes=())
     assert render_fix_summary(result(), plan, PATCH) == (
         "No problems found, so pataisa.patch is empty.\n"
     )

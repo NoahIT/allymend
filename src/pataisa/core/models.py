@@ -1,6 +1,6 @@
 from enum import StrEnum
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class Impact(StrEnum):
@@ -102,11 +102,13 @@ class Fix(_Model):
     Attributes:
         rule_id: The axe-core rule the occurrence fails.
         page: The page it was found on.
+        target: The occurrence's CSS selectors.
         edits: The changes to make.
     """
 
     rule_id: str
     page: str
+    target: tuple[str, ...]
     edits: tuple[Edit, ...]
 
 
@@ -126,15 +128,71 @@ class Unfixed(_Model):
     reason: str
 
 
+class FileChange(_Model):
+    """What the fixes do to one source file.
+
+    Attributes:
+        file: The file's path relative to the scanned folder, with forward slashes.
+        diff: The change as a unified diff.
+        before: The file's text when the fixes were planned. Left out of serialized output.
+        after: The text with every fix for the file applied. Left out of serialized output.
+    """
+
+    file: str
+    diff: str
+    before: str = Field(exclude=True, repr=False)
+    after: str = Field(exclude=True, repr=False)
+
+
+class Check(_Model):
+    """One check of a file's fixes.
+
+    Attributes:
+        name: What was checked: ``edits``, ``scanned``, ``fixed``, ``no-new-problems`` or
+            ``tree``.
+        passed: Whether it held.
+        detail: What was wrong, when it didn't hold.
+    """
+
+    name: str
+    passed: bool
+    detail: str = ""
+
+
+class Verification(_Model):
+    """The evidence for one file's fixes.
+
+    Attributes:
+        file: The file's path relative to the scanned folder, with forward slashes.
+        checks: The checks that were run, in order. The pages are loaded only when the edits
+            pass, and the rest is checked only when both pages loaded.
+    """
+
+    file: str
+    checks: tuple[Check, ...]
+
+    @property
+    def passed(self) -> bool:
+        """Whether every check held."""
+        return all(check.passed for check in self.checks)
+
+
 class FixPlan(_Model):
     """The fixes for one scan, and the occurrences they leave.
 
     Attributes:
         fixes: Fixes that were planned, in scan order.
         unfixed: Occurrences without a fix, in scan order.
-        patch: All the fixes as one unified diff, or an empty string when there are none.
+        changes: What the fixes do to each file, in path order.
+        verifications: Evidence from checking the changes, once they have been checked.
     """
 
     fixes: tuple[Fix, ...]
     unfixed: tuple[Unfixed, ...]
-    patch: str
+    changes: tuple[FileChange, ...]
+    verifications: tuple[Verification, ...] = ()
+
+    @property
+    def patch(self) -> str:
+        """All the changes as one unified diff, or an empty string when there are none."""
+        return "".join(change.diff for change in self.changes)
