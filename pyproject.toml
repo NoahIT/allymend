@@ -1,0 +1,17 @@
+[project]
+name = "pataisa"
+version = "0.1.0"
+description = "Finds accessibility problems, explains them in plain language and proposes verified fixes to a site's source code."
+authors = [
+    {name = "Nojus Raščius"}
+]
+license = "Apache-2.0"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+]
+
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
