@@ -4,9 +4,12 @@ from dataclasses import dataclass
 from types import MappingProxyType
 from typing import TYPE_CHECKING
 
-from allymend.core.models import FileChange, Fix, FixPlan, Unfixed
+from justhtml import JustHTML
+
+from allymend.core.models import Capture, FileChange, Fix, FixPlan, Slot, Unfixed
 from allymend.errors import CannotFixError
 from allymend.files import read_source
+from allymend.fixers.alt_text import check_alt_text, fix_image_alt
 from allymend.fixers.edits import apply_edits, unified_diff
 from allymend.fixers.html_has_lang import check_language_tag, fix_html_has_lang
 
@@ -14,8 +17,9 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Mapping
     from pathlib import Path
 
-    from allymend.core.models import Edit, Occurrence, ScanResult, SourceLocation
+    from allymend.core.models import Edit, Occurrence, ScanResult, SourceLocation, Value
     from allymend.files import SourceText
+    from allymend.fixers.values import ValueSource
 
 
 @dataclass(frozen=True, slots=True)
@@ -25,12 +29,15 @@ class FixOptions:
     Attributes:
         language: The pages' language as a tag such as ``en`` or ``en-GB``. Fixing a missing
             page language needs it.
+        values: Where text that fixes need comes from, such as alt text. Without it, those
+            fixes are left for a person.
 
     Raises:
         ValueError: ``language`` is not a language tag.
     """
 
     language: str | None = None
+    values: ValueSource | None = None
 
     def __post_init__(self) -> None:
         if self.language is not None:
@@ -38,7 +45,12 @@ class FixOptions:
 
 
 def plan_fixes(
-    root: Path, result: ScanResult, options: FixOptions | None = None, *, path_prefix: str = ""
+    root: Path,
+    result: ScanResult,
+    options: FixOptions | None = None,
+    *,
+    path_prefix: str = "",
+    captures: Mapping[tuple[str, tuple[str, ...]], Capture] | None = None,
 ) -> FixPlan:
     """Work out fixes for the occurrences in a scan of the folder ``root``.
 
@@ -46,8 +58,12 @@ def plan_fixes(
     Each source file is read once, and each fix is checked against the others planned for the
     same file. Nothing is written. The diffs' paths are relative to ``root``, with
     ``path_prefix`` in front so that the patch can be applied from another folder.
+
+    Fixes that need text someone has to write, such as alt text, ask ``options.values`` for it.
+    ``captures`` holds how elements looked in the browser, keyed by page and target, to help
+    whoever writes the text.
     """
-    planner = _Planner(root, options or FixOptions())
+    planner = _Planner(root, options or FixOptions(), captures or {})
     fixes: list[Fix] = []
     unfixed: list[Unfixed] = []
     for page in result.pages:
@@ -66,22 +82,60 @@ def plan_fixes(
     return FixPlan(fixes=tuple(fixes), unfixed=tuple(unfixed), changes=planner.changes(path_prefix))
 
 
-def _page_language(text: str, location: SourceLocation, options: FixOptions) -> Edit:
-    if options.language is None:
+@dataclass(frozen=True, slots=True)
+class _Request:
+    text: str
+    page: str
+    occurrence: Occurrence
+    location: SourceLocation
+    language: str | None
+    options: FixOptions
+    capture: Capture | None
+
+
+def _page_language(request: _Request) -> tuple[Edit, Value | None]:
+    if request.options.language is None:
         raise CannotFixError("the pages' language wasn't given (--lang)")
-    return fix_html_has_lang(text, location, options.language)
+    return fix_html_has_lang(request.text, request.location, request.options.language), None
 
 
-_FIXERS: Mapping[str, Callable[[str, SourceLocation, FixOptions], Edit]] = MappingProxyType(
-    {"html-has-lang": _page_language}
+def _image_alt(request: _Request) -> tuple[Edit, Value | None]:
+    if request.options.values is None:
+        raise CannotFixError("needs alt text from a person, or from a model")
+    capture = request.capture or Capture()
+    slot = Slot(
+        kind="alt-text",
+        rule_id=request.occurrence.rule_id,
+        page=request.page,
+        target=request.occurrence.target,
+        html=request.occurrence.html,
+        language=request.language or request.options.language,
+        context=capture.context,
+        image=capture.image,
+    )
+    value = request.options.values.fill(slot)
+    alt = check_alt_text(value.text, slot.max_length)
+    edit = fix_image_alt(request.text, request.location, alt)
+    return edit, value.model_copy(update={"text": alt})
+
+
+_FIXERS: Mapping[str, Callable[[_Request], tuple[Edit, Value | None]]] = MappingProxyType(
+    {"html-has-lang": _page_language, "image-alt": _image_alt}
 )
 
 
 class _Planner:
-    def __init__(self, root: Path, options: FixOptions) -> None:
+    def __init__(
+        self,
+        root: Path,
+        options: FixOptions,
+        captures: Mapping[tuple[str, tuple[str, ...]], Capture],
+    ) -> None:
         self._root = root
         self._options = options
+        self._captures = captures
         self._sources: dict[str, SourceText | None] = {}
+        self._languages: dict[str, str | None] = {}
         self._edits: dict[str, list[Edit]] = {}
 
     def fix(self, page: str, occurrence: Occurrence) -> Fix:
@@ -92,14 +146,30 @@ class _Planner:
         if location is None:
             raise CannotFixError("the element couldn't be traced to its source")
         text = self._text(location.file)
-        edit = fixer(text, location, self._options)
+        edit, value = fixer(
+            _Request(
+                text=text,
+                page=page,
+                occurrence=occurrence,
+                location=location,
+                language=self._language(location.file, text),
+                options=self._options,
+                capture=self._captures.get((page, occurrence.target)),
+            )
+        )
         planned = self._edits.get(location.file, [])
         try:
             apply_edits(text, [*planned, edit])
         except ValueError:
             raise CannotFixError("it overlaps another fix in the same file") from None
         self._edits[location.file] = [*planned, edit]
-        return Fix(rule_id=occurrence.rule_id, page=page, target=occurrence.target, edits=(edit,))
+        return Fix(
+            rule_id=occurrence.rule_id,
+            page=page,
+            target=occurrence.target,
+            edits=(edit,),
+            value=value,
+        )
 
     def changes(self, path_prefix: str) -> tuple[FileChange, ...]:
         changes = []
@@ -122,3 +192,17 @@ class _Planner:
                 "fixes"
             )
         return source.text
+
+    def _language(self, file: str, text: str) -> str | None:
+        if file not in self._languages:
+            self._languages[file] = _document_language(text)
+        return self._languages[file]
+
+
+def _document_language(text: str) -> str | None:
+    elements = JustHTML(text, sanitize=False).root.query("html")
+    language = next((((e.attrs or {}).get("lang") or "").strip() for e in elements), "")
+    try:
+        return check_language_tag(language)
+    except ValueError:
+        return None

@@ -8,8 +8,9 @@ from pathlib import Path
 import pytest
 
 from allymend.cli import EXIT_CLEAN, EXIT_PROBLEMS, main
-from allymend.core.models import Edit, SourceLocation
-from allymend.fixers import FixOptions, fix_html_has_lang
+from allymend.core.models import Edit
+from allymend.fixers import fix_html_has_lang
+from allymend.fixers.plan import _Request
 
 pytestmark = pytest.mark.browser
 
@@ -40,7 +41,7 @@ def test_the_patch_applies_and_fixes_the_page(
     ]
     assert (
         "  shop/mug.html: Image has no text alternative (image-alt), 1 element: "
-        "there's no automatic fix for this rule yet"
+        "needs alt text from a person, or from a model"
     ) in lines
     assert (
         Path("allymend.patch")
@@ -79,9 +80,9 @@ def test_evidence_records_every_check(capsys: pytest.CaptureFixture[str]) -> Non
 def test_a_fix_that_fails_its_checks_is_left_out(
     capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    def hiding(text: str, location: SourceLocation, options: FixOptions) -> Edit:
-        edit = fix_html_has_lang(text, location, options.language or "en")
-        return edit.model_copy(update={"text": f'{edit.text} aria-hidden="true"'})
+    def hiding(request: _Request) -> tuple[Edit, None]:
+        edit = fix_html_has_lang(request.text, request.location, "en")
+        return edit.model_copy(update={"text": f'{edit.text} aria-hidden="true"'}), None
 
     monkeypatch.setattr("allymend.fixers.plan._FIXERS", {"html-has-lang": hiding})
 

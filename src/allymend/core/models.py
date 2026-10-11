@@ -103,6 +103,60 @@ class ScanResult(_Model):
     pages: tuple[PageResult, ...]
 
 
+class Capture(_Model):
+    """How an element looked in the browser, and the text around it.
+
+    Attributes:
+        image: A PNG screenshot of the element. Left out of serialized output.
+        context: Nearby text that helps describe the element, by kind, for example ``link`` for
+            the address of a link the element is in.
+    """
+
+    image: bytes | None = Field(default=None, exclude=True, repr=False)
+    context: dict[str, str] = Field(default_factory=dict)
+
+
+class Slot(_Model):
+    """Text a fix needs that a person or a model has to write.
+
+    Attributes:
+        kind: What the text is for. Only ``alt-text`` so far.
+        rule_id: The axe-core rule the occurrence fails.
+        page: The page it was found on.
+        target: The occurrence's CSS selectors.
+        html: The element's opening markup as rendered in the browser.
+        language: The page's language tag, if known.
+        context: Nearby text that helps describe the element, as in ``Capture``.
+        image: The element as rendered, as PNG, if it was captured. Left out of serialized
+            output.
+        max_length: The longest acceptable text.
+    """
+
+    kind: Literal["alt-text"]
+    rule_id: str
+    page: str
+    target: tuple[str, ...]
+    html: str
+    language: str | None = None
+    context: dict[str, str] = Field(default_factory=dict)
+    image: bytes | None = Field(default=None, exclude=True, repr=False)
+    max_length: int = 150
+
+
+class Value(_Model):
+    """Text written for a slot.
+
+    Attributes:
+        text: The text.
+        rationale: Why it fits, in a sentence.
+        source: Who wrote it, for example the model's name.
+    """
+
+    text: str
+    rationale: str = ""
+    source: str
+
+
 class Fix(_Model):
     """Source changes that fix one occurrence.
 
@@ -111,12 +165,14 @@ class Fix(_Model):
         page: The page it was found on.
         target: The occurrence's CSS selectors.
         edits: The changes to make.
+        value: The text the fix inserts, when someone had to write it.
     """
 
     rule_id: str
     page: str
     target: tuple[str, ...]
     edits: tuple[Edit, ...]
+    value: Value | None = None
 
 
 class Unfixed(_Model):

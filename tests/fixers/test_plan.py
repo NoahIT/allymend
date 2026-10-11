@@ -3,14 +3,18 @@ from pathlib import Path
 import pytest
 
 from allymend.core.models import (
+    Capture,
     Edit,
     Impact,
     Occurrence,
     PageResult,
     ScanResult,
+    Slot,
     SourceLocation,
     Unfixed,
+    Value,
 )
+from allymend.errors import CannotFixError
 from allymend.fixers import FixOptions, plan_fixes, unified_diff
 
 PAGE = '<!doctype html>\n<html>\n<head><title>Shop</title></head>\n<body><img src="a.png">\n'
@@ -91,11 +95,101 @@ def test_leaves_a_missing_language_alone_when_none_was_given(tmp_path: Path) -> 
 
 def test_leaves_rules_without_a_fixer_for_a_person(tmp_path: Path) -> None:
     write(tmp_path, "index.html")
-    image = problem("image-alt", location(tag="<img"), target="img")
-    plan = plan_fixes(tmp_path, scan(image), FixOptions(language="en"))
+    link = problem("link-name", location(tag="<img"), target="a")
+    plan = plan_fixes(tmp_path, scan(link), FixOptions(language="en"))
     assert plan.unfixed == (
-        unfixed("there's no automatic fix for this rule yet", "image-alt", "img"),
+        unfixed("there's no automatic fix for this rule yet", "link-name", "a"),
     )
+
+
+class Writer:
+    """A value source that answers every slot with the same text, and remembers the slots."""
+
+    def __init__(self, text: str = "Blue mug", *, decline: str | None = None) -> None:
+        self.text = text
+        self.decline = decline
+        self.slots: list[Slot] = []
+
+    def fill(self, slot: Slot) -> Value:
+        self.slots.append(slot)
+        if self.decline is not None:
+            raise CannotFixError(self.decline)
+        return Value(text=self.text, rationale="It shows a mug.", source="writer")
+
+
+def image_problem(text: str = PAGE) -> Occurrence:
+    return problem("image-alt", location(text=text, tag="<img"), target="img").model_copy(
+        update={"html": '<img src="a.png">'}
+    )
+
+
+def test_alt_text_needs_someone_to_write_it(tmp_path: Path) -> None:
+    write(tmp_path, "index.html")
+    plan = plan_fixes(tmp_path, scan(image_problem()))
+    assert plan.unfixed == (
+        unfixed("needs alt text from a person, or from a model", "image-alt", "img"),
+    )
+
+
+def test_alt_text_comes_from_the_value_source(tmp_path: Path) -> None:
+    text = PAGE.replace("<html>", '<html lang="lt">')
+    write(tmp_path, "index.html", text)
+    writer = Writer('Mug "Harbor" & co ')
+    capture = Capture(image=b"png bytes", context={"heading": "Shop"})
+
+    plan = plan_fixes(
+        tmp_path,
+        scan(image_problem(text)),
+        FixOptions(language="en", values=writer),
+        captures={("index.html", ("img",)): capture},
+    )
+
+    [fix] = plan.fixes
+    assert fix.value == Value(
+        text='Mug "Harbor" & co', rationale="It shows a mug.", source="writer"
+    )
+    assert fix.edits[0].text == ' alt="Mug &quot;Harbor&quot; &amp; co"'
+    [slot] = writer.slots
+    assert slot == Slot(
+        kind="alt-text",
+        rule_id="image-alt",
+        page="index.html",
+        target=("img",),
+        html='<img src="a.png">',
+        language="lt",
+        context={"heading": "Shop"},
+        image=b"png bytes",
+    )
+    assert "image" not in slot.model_dump()
+
+
+def test_alt_text_falls_back_to_the_given_language(tmp_path: Path) -> None:
+    write(tmp_path, "index.html")
+    writer = Writer()
+    plan_fixes(tmp_path, scan(image_problem()), FixOptions(language="en", values=writer))
+    assert [slot.language for slot in writer.slots] == ["en"]
+
+
+@pytest.mark.parametrize(
+    ("writer", "reason"),
+    [
+        (
+            Writer(decline='the image looks decorative; a person should confirm alt=""'),
+            'the image looks decorative; a person should confirm alt=""',
+        ),
+        (Writer("Image of a mug"), "the suggested alt text starts with words like"),
+        (Writer("   "), "the suggested alt text is empty"),
+    ],
+    ids=["declined", "redundant", "empty"],
+)
+def test_alt_text_that_cannot_be_used_is_left_with_the_reason(
+    tmp_path: Path, writer: Writer, reason: str
+) -> None:
+    write(tmp_path, "index.html")
+    plan = plan_fixes(tmp_path, scan(image_problem()), FixOptions(values=writer))
+    [left] = plan.unfixed
+    assert left.reason.startswith(reason)
+    assert plan.changes == ()
 
 
 def test_leaves_problems_without_a_source_location(tmp_path: Path) -> None:
