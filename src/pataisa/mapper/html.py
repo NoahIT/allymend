@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 from justhtml import JustHTML, SelectorError
 
@@ -11,8 +11,11 @@ from pataisa.files import read_source
 if TYPE_CHECKING:
     from pathlib import Path
 
+    from justhtml import QueryMatch
+
 _BYTE_ORDER_MARK = "\ufeff"
 _TAG_NAME = re.compile(r"<([A-Za-z][A-Za-z0-9-]*)")
+_IDENTIFYING_ATTRIBUTES = ("id", "src", "href", "name")
 
 
 class HtmlSource:
@@ -27,25 +30,50 @@ class HtmlSource:
     def locate(self, occurrence: Occurrence) -> SourceLocation | None:
         """Find where the element an occurrence points to is written.
 
-        Returns None unless exactly one element matches the occurrence's selector, it has the
-        same tag name as the element in the browser, and the parser read it from the file
-        rather than inserting it.
+        The occurrence's selector is tried first: it must match exactly one element with the
+        same tag name as the element in the browser. When it doesn't, for example because a
+        script changed the element's classes, exactly one element with that tag must share the
+        browser element's ``id``, ``src``, ``href`` or ``name``, tried in that order. Returns
+        None when neither finds an element, or the element was inserted by the parser rather
+        than read from the file.
         """
-        if len(occurrence.target) != 1:
+        tag = _tag_name(occurrence.html)
+        if len(occurrence.target) != 1 or tag is None:
             return None
-        try:
-            matches = list(self._document.root.query(occurrence.target[0]))
-        except SelectorError:
+        found_by: Literal["selector", "attributes"] = "selector"
+        element = self._by_selector(occurrence.target[0], tag)
+        if element is None:
+            found_by = "attributes"
+            element = self._by_attributes(occurrence.html, tag)
+        if element is None:
             return None
-        if len(matches) != 1:
-            return None
-        [element] = matches
         line, column, offset = element.origin_line, element.origin_col, element.origin_offset
         if line is None or column is None or offset is None:
             return None
-        if element.name != _tag_name(occurrence.html):
+        return SourceLocation(
+            file=self.file, line=line, column=column, offset=offset + self._shift, found_by=found_by
+        )
+
+    def _by_selector(self, selector: str, tag: str) -> QueryMatch | None:
+        try:
+            matches = self._document.root.query(selector)
+        except SelectorError:
             return None
-        return SourceLocation(file=self.file, line=line, column=column, offset=offset + self._shift)
+        return matches[0] if len(matches) == 1 and matches[0].name == tag else None
+
+    def _by_attributes(self, html: str, tag: str) -> QueryMatch | None:
+        rendered = next(iter(JustHTML(html, sanitize=False).root.query(tag)), None)
+        if rendered is None:
+            return None
+        candidates = self._document.root.query(tag)
+        for name in _IDENTIFYING_ATTRIBUTES:
+            value = _attribute(rendered, name)
+            if not value:
+                continue
+            same = [element for element in candidates if _attribute(element, name) == value]
+            if len(same) == 1:
+                return same[0]
+        return None
 
 
 def map_sources(root: Path, result: ScanResult) -> ScanResult:
@@ -67,6 +95,10 @@ def _map_page(root: Path, page: PageResult) -> PageResult:
     source = HtmlSource(read.text, page.page)
     located = tuple(o.model_copy(update={"source": source.locate(o)}) for o in page.occurrences)
     return page.model_copy(update={"occurrences": located})
+
+
+def _attribute(element: QueryMatch, name: str) -> str | None:
+    return (element.attrs or {}).get(name)
 
 
 def _tag_name(html: str) -> str | None:

@@ -95,6 +95,54 @@ def test_no_location_unless_the_match_is_certain(target: str | tuple[str, ...], 
     assert locate(text, target, html) is None
 
 
+def test_falls_back_to_attributes_when_a_script_changed_the_classes() -> None:
+    text = '<div class="about">\n  <img src="/qr.png" style="width: 110px">\n</div>'
+    rendered = '<img src="/qr.png" style="width: 110px; top: -50px;">'
+    assert locate(text, ".fade-in > img", rendered) == SourceLocation(
+        file="index.html", line=2, column=3, offset=text.index("<img"), found_by="attributes"
+    )
+
+
+@pytest.mark.parametrize(
+    ("text", "target", "html", "found"),
+    [
+        (
+            '<img src="/link.png" id="first"><img src="/link.png" id="second">',
+            ".missing",
+            '<img src="/link.png" id="second">',
+            'id="second"',
+        ),
+        ('<a href="/a">A</a><a href="/b">B</a>', "a", '<a href="/b">', 'href="/b"'),
+        (
+            '<a href="/p?a=1&amp;b=2">Shop</a>',
+            ".missing",
+            '<a href="/p?a=1&amp;b=2" class="active">',
+            "href",
+        ),
+        ('<img id="123" src="a.png">', "#\\31 23", '<img id="123" src="a.png">', 'id="123"'),
+    ],
+    ids=["id-before-a-shared-src", "one-of-several-selector-matches", "encoded-url", "css-escape"],
+)
+def test_the_first_attribute_that_singles_out_the_element_wins(
+    text: str, target: str, html: str, found: str
+) -> None:
+    location = locate(text, target, html)
+    assert location is not None
+    assert location.found_by == "attributes"
+    start = text.rindex("<", 0, text.index(found))
+    assert location.offset == start
+
+
+def test_no_location_when_the_attributes_are_shared_too() -> None:
+    text = '<img src="/link.png"><img src="/link.png">'
+    assert locate(text, ".missing", '<img src="/link.png">') is None
+
+
+def test_no_fallback_for_markup_that_only_parses_inside_a_parent() -> None:
+    text = '<table><tr><td id="price">9</td></tr></table>'
+    assert locate(text, ".missing", '<td id="price">') is None
+
+
 def write(root: Path, relative: str, data: bytes) -> None:
     path = root / relative
     path.parent.mkdir(parents=True, exist_ok=True)

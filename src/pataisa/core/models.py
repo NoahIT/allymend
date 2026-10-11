@@ -1,4 +1,5 @@
 from enum import StrEnum
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -26,12 +27,17 @@ class SourceLocation(_Model):
         offset: The 0-based character offset of the start tag's ``<`` in the file's text as
             ``pataisa.files.read_source`` returns it: decoded without newline translation, and
             counting a byte order mark.
+        found_by: ``selector`` when axe-core's selector matched the element in the source.
+            ``attributes`` when the selector didn't, and the element was found by an ``id``,
+            ``src``, ``href`` or ``name`` it shares with the element in the browser instead;
+            that is less certain.
     """
 
     file: str
     line: int
     column: int
     offset: int
+    found_by: Literal["selector", "attributes"] = "selector"
 
 
 class Edit(_Model):
