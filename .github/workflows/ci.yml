@@ -27,7 +27,7 @@ jobs:
         with:
           python-version: "3.14"
           cache: poetry
-      - run: poetry sync --no-interaction
+      - run: poetry sync --all-extras --no-interaction
       - run: make lint
 
   test:
@@ -48,7 +48,7 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           cache: poetry
-      - run: poetry sync --no-interaction
+      - run: poetry sync --all-extras --no-interaction
       - run: poetry run playwright install --with-deps chromium
       - run: make test
 

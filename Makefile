@@ -9,7 +9,7 @@ help:
 	@echo live    - scan the public pages in live/targets.txt
 
 install:
-	poetry sync
+	poetry sync --all-extras
 	poetry run pre-commit install
 
 format:
