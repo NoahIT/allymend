@@ -6,12 +6,14 @@ from collections import Counter
 from typing import TYPE_CHECKING
 from urllib.parse import quote
 
+from justhtml import JustHTML
+
 from allymend.core.models import Check, Unfixed, Verification
 from allymend.scanner import open_browser
 from allymend.scanner.site import serve
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Callable, Mapping, Sequence
     from pathlib import Path
 
     from allymend.core.models import FileChange, Fix, FixPlan, PageResult
@@ -19,20 +21,8 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-_HIDING = (
-    ("aria-hidden", re.compile(r"aria-hidden", re.IGNORECASE)),
-    (
-        "an ARIA role of none or presentation",
-        re.compile(r"\brole\s*=\s*[\"']?\s*(none|presentation)\b", re.IGNORECASE),
-    ),
-    ("display: none", re.compile(r"display\s*:\s*none", re.IGNORECASE)),
-    ("visibility: hidden", re.compile(r"visibility\s*:\s*hidden", re.IGNORECASE)),
-    ('tabindex="-1"', re.compile(r"\btabindex\s*=\s*[\"']?\s*-\s*1\b", re.IGNORECASE)),
-    ("the hidden attribute", re.compile(r"(?<![\w-])hidden(?=[\s=/>]|$)", re.IGNORECASE)),
-    ("the inert attribute", re.compile(r"(?<![\w-])inert(?=[\s=/>]|$)", re.IGNORECASE)),
-)
-_START_TAG = re.compile(r"<[A-Za-z]")
 _ROLE = re.compile(r"^\s*- ([^\s:\"]+)")
+_SPACE = re.compile(r"\s+")
 
 
 def verify_fixes(root: Path, plan: FixPlan, options: ScanOptions | None = None) -> FixPlan:
@@ -81,7 +71,7 @@ def verify_fixes(root: Path, plan: FixPlan, options: ScanOptions | None = None) 
 def _verify(
     browser: BrowserSession, url: str, change: FileChange, fixes: Sequence[Fix]
 ) -> Verification:
-    checks = [_check_edits(change, fixes)]
+    checks = [_check_edits(change)]
     if checks[-1].passed:
         before = browser.scan(change.file, url, tree=True)
         after = browser.scan(change.file, url, html=change.after, tree=True)
@@ -95,19 +85,49 @@ def _verify(
     return Verification(file=change.file, checks=tuple(checks))
 
 
-def _check_edits(change: FileChange, fixes: Sequence[Fix]) -> Check:
-    added: list[str] = []
-    removes_elements = False
-    for edit in (edit for fix in fixes for edit in fix.edits if edit.file == change.file):
-        added += [name for name, pattern in _HIDING if pattern.search(edit.text)]
-        removed = change.before[edit.start : edit.end]
-        removes_elements |= len(_START_TAG.findall(removed)) > len(_START_TAG.findall(edit.text))
-    problems = [f"an edit adds {', '.join(dict.fromkeys(added))}"] if added else []
-    if removes_elements:
+def _check_edits(change: FileChange) -> Check:
+    hiding_before, elements_before = _inventory(change.before)
+    hiding_after, elements_after = _inventory(change.after)
+    added = hiding_after - hiding_before
+    problems = []
+    if added:
+        problems.append("an edit adds " + ", ".join(name for name, _ in _HIDING if added[name]))
+    if elements_after < elements_before:
         problems.append("an edit removes an element")
     if problems:
         return Check(name="edits", passed=False, detail="; ".join(problems))
     return Check(name="edits", passed=True)
+
+
+def _inventory(text: str) -> tuple[Counter[str], int]:
+    """Count the ways a page's elements are hidden from assistive technology, and its elements."""
+    hiding: Counter[str] = Counter()
+    elements = 0
+    for element in JustHTML(text, sanitize=False).root.query("*"):
+        if element.name.startswith("!"):
+            continue
+        elements += 1
+        attributes = element.attrs or {}
+        hiding.update(name for name, hides in _HIDING if hides(attributes))
+    return hiding, elements
+
+
+def _value(attributes: Mapping[str, str | None], name: str) -> str:
+    return _SPACE.sub("", (attributes.get(name) or "").lower())
+
+
+_HIDING: tuple[tuple[str, Callable[[Mapping[str, str | None]], bool]], ...] = (
+    ("aria-hidden", lambda a: _value(a, "aria-hidden") == "true"),
+    (
+        "an ARIA role of none or presentation",
+        lambda a: (a.get("role") or "").lower().split()[:1] in (["none"], ["presentation"]),
+    ),
+    ("display: none", lambda a: "display:none" in _value(a, "style")),
+    ("visibility: hidden", lambda a: "visibility:hidden" in _value(a, "style")),
+    ('tabindex="-1"', lambda a: _value(a, "tabindex") == "-1"),
+    ("the hidden attribute", lambda a: "hidden" in a),
+    ("the inert attribute", lambda a: "inert" in a),
+)
 
 
 def _check_scanned(before: PageResult, after: PageResult) -> Check:

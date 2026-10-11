@@ -31,7 +31,7 @@ def plan_for(replacements: Sequence[tuple[str, str]], file: str = "index.html") 
 
 def check_edits(replacements: Sequence[tuple[str, str]]) -> tuple[bool, str]:
     plan = plan_for(replacements)
-    check = _check_edits(plan.changes[0], plan.fixes)
+    check = _check_edits(plan.changes[0])
     return check.passed, check.detail
 
 
@@ -39,9 +39,11 @@ def check_edits(replacements: Sequence[tuple[str, str]]) -> tuple[bool, str]:
     ("inserted", "found"),
     [
         (' aria-hidden="true"', "aria-hidden"),
+        (' ARIA-HIDDEN="True"', "aria-hidden"),
         (' role="presentation"', "an ARIA role of none or presentation"),
         (" role=none", "an ARIA role of none or presentation"),
         (' style="display:none"', "display: none"),
+        (' style="color: red; Display : None"', "display: none"),
         (' style="visibility: hidden"', "visibility: hidden"),
         (' tabindex="-1"', 'tabindex="-1"'),
         (" hidden", "the hidden attribute"),
@@ -53,11 +55,45 @@ def test_edits_that_hide_content_are_caught(inserted: str, found: str) -> None:
 
 
 @pytest.mark.parametrize(
-    "inserted",
-    [' lang="en"', ' role="navigation"', ' class="hidden"', ' data-hidden="1"', ' title="inert"'],
+    ("old", "new"),
+    [
+        ("<html", '<html lang="en"'),
+        ("<html", '<html role="navigation"'),
+        ("<html", '<html class="hidden"'),
+        ("<html", '<html data-hidden="1"'),
+        ("<html", '<html title="inert"'),
+        ("<img", '<img aria-hidden="false"'),
+        ("<img", '<img title="Hidden treasure, display: none"'),
+        ("</main>", "<p>A hidden gem, inert no more.</p></main>"),
+    ],
+    ids=[
+        "lang",
+        "landmark-role",
+        "class-named-hidden",
+        "data-attribute",
+        "word-in-a-title",
+        "aria-hidden-false",
+        "words-in-a-value",
+        "words-in-text",
+    ],
 )
-def test_ordinary_edits_pass(inserted: str) -> None:
-    assert check_edits([("<html", f"<html{inserted}")]) == (True, "")
+def test_ordinary_edits_pass(old: str, new: str) -> None:
+    assert check_edits([(old, new)]) == (True, "")
+
+
+def test_hiding_that_was_already_there_is_not_blamed_on_the_edit() -> None:
+    assert check_edits([("<main>", '<main aria-hidden="true">')]) == (
+        False,
+        "an edit adds aria-hidden",
+    )
+    plan = plan_for([("<html", '<html lang="en"')])
+    hidden = plan.changes[0].model_copy(
+        update={
+            "before": plan.changes[0].before.replace("<main>", '<main aria-hidden="true">'),
+            "after": plan.changes[0].after.replace("<main>", '<main aria-hidden="true">'),
+        }
+    )
+    assert _check_edits(hidden).passed
 
 
 def test_removing_an_element_is_caught() -> None:
