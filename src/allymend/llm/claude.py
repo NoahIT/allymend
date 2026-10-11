@@ -63,10 +63,8 @@ class ClaudeValues:
     given.
     """
 
-    def __init__(
-        self, model: str = DEFAULT_MODEL, client: anthropic.Anthropic | None = None
-    ) -> None:
-        self.model = model
+    def __init__(self, model: str | None = None, client: anthropic.Anthropic | None = None) -> None:
+        self.model = model or DEFAULT_MODEL
         self._client = client
 
     def request(self, slot: Slot) -> dict[str, Any]:

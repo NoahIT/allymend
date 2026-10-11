@@ -1,7 +1,7 @@
 from pathlib import Path
 
-from allymend.cli.output import render_fix_summary
-from allymend.core.models import Edit, Fix, FixPlan, PageResult, ScanResult, Unfixed
+from allymend.cli.output import render_fix_summary, render_payloads
+from allymend.core.models import Edit, Fix, FixPlan, PageResult, ScanResult, Slot, Unfixed, Value
 
 PATCH = Path("allymend.patch")
 
@@ -49,6 +49,54 @@ def test_lists_what_was_fixed_and_what_was_left() -> None:
         "Not scanned:",
         "  shop.html: HTTP 404",
     ]
+
+
+def test_lists_text_written_by_a_model() -> None:
+    value = Value(text="A blue mug", rationale="It shows a mug.", source="claude-opus-5-5")
+    written = fix("shop.html").model_copy(update={"rule_id": "image-alt", "value": value})
+    plan = FixPlan(fixes=(fix("index.html"), written), unfixed=(), changes=())
+    assert render_fix_summary(result(), plan, PATCH).splitlines()[2:] == [
+        "",
+        "Text written by a model; read each one before applying the patch:",
+        '  shop.html: "A blue mug" (claude-opus-5-5)',
+    ]
+
+
+def test_payloads_show_images_by_size_and_text_in_full() -> None:
+    request = {
+        "model": "claude-opus-5-5",
+        "system": "Write alt text.\n\nBe brief.",
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image",
+                        "source": {"type": "base64", "media_type": "image/jpeg", "data": "AAAA"},
+                    },
+                    {"type": "text", "text": "Alt text, please.\n\n<page_details>"},
+                ],
+            }
+        ],
+    }
+    target = Slot(kind="alt-text", rule_id="image-alt", page="a.html", target=("img",), html="")
+    assert render_payloads([(target, request)]).splitlines() == [
+        "Would send 1 request to claude-opus-5-5. Nothing has been sent.",
+        "",
+        "Instructions sent with every request:",
+        "  Write alt text.",
+        "",
+        "  Be brief.",
+        "",
+        "1. a.html: img",
+        "   image: image/jpeg, 3 bytes",
+        "   Alt text, please.",
+        "",
+        "   <page_details>",
+    ]
+    assert render_payloads([]) == (
+        "Nothing would be sent: no image needs alt text that allymend can fix.\n"
+    )
 
 
 def test_says_when_nothing_could_be_fixed() -> None:

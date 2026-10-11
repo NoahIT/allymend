@@ -101,7 +101,7 @@ def _page_language(request: _Request) -> tuple[Edit, Value | None]:
 
 def _image_alt(request: _Request) -> tuple[Edit, Value | None]:
     if request.options.values is None:
-        raise CannotFixError("needs alt text from a person, or from a model")
+        raise CannotFixError("needs alt text from a person, or from a model (--alt-text claude)")
     capture = request.capture or Capture()
     slot = Slot(
         kind="alt-text",

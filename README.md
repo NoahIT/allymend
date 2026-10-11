@@ -6,7 +6,7 @@ The name joins "ally", the way a11y (accessibility) is often said, with "mend".
 
 ## Status
 
-Early development. Scanning works, and fixing has started. The first release, 0.1.0, will cover static HTML sites and three kinds of fixes: page language, viewport settings and form labels.
+Early development, for static HTML sites. Scanning works, and so do the first fixes: a missing page language, and missing alt text written by Claude when you ask for it.
 
 ## How it works
 
@@ -23,7 +23,7 @@ Early development. Scanning works, and fixing has started. The first release, 0.
 
 - Tell you that your site is accessible or compliant with any law. Automated checks find only part of real accessibility problems. The rest needs people, including people who use assistive technology.
 - Patch pages in the browser at runtime. Allymend is not an overlay; it changes source code.
-- Invent content. Alt text, link names and similar text need your judgment, so those findings are marked as needing a person.
+- Write content on its own. Alt text, link names and similar text need judgment. Allymend drafts alt text only when you ask Claude to, and lists every draft for you to read; everything else is marked as needing a person.
 
 ## Trying it
 
@@ -51,6 +51,21 @@ poetry run allymend fix path/to/site --lang en
 ```
 
 This scans the folder, checks each fix as described in step 4 above, and writes the fixes that pass to `allymend.patch`; your files aren't changed. Everything it couldn't fix, including fixes that failed a check, is listed with the reason. Review the patch, then apply it with `git apply allymend.patch` from the folder you ran allymend in. Add `--evidence checks.json` to keep a record of every check.
+
+### Alt text written by Claude
+
+Images without alt text need words that describe them. Allymend can ask Claude to write them. This is off unless you ask for it, and needs the `claude` extra and an Anthropic API key:
+
+```
+poetry install --all-extras
+$env:ANTHROPIC_API_KEY = "<your key>"     # export ANTHROPIC_API_KEY=... outside PowerShell
+poetry run allymend fix path/to/site --alt-text claude --show-payload
+poetry run allymend fix path/to/site --alt-text claude
+```
+
+For each image, Claude receives the image as the browser shows it and the text around it: the page title, the nearest heading, a caption, the link the image is in and nearby text, each cut to 200 characters. Nothing else from your project is sent. `--show-payload` prints exactly that for every image and stops without sending anything.
+
+The text Claude writes is checked like any other fix and listed in the summary. Read it before applying the patch. When Claude thinks an image is decorative, allymend leaves it for you to decide, because `alt=""` hides an image from screen readers. The model is `claude-opus-5-5` unless you choose another with `--model`.
 
 ## Development
 

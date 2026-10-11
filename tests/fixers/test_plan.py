@@ -127,7 +127,9 @@ def test_alt_text_needs_someone_to_write_it(tmp_path: Path) -> None:
     write(tmp_path, "index.html")
     plan = plan_fixes(tmp_path, scan(image_problem()))
     assert plan.unfixed == (
-        unfixed("needs alt text from a person, or from a model", "image-alt", "img"),
+        unfixed(
+            "needs alt text from a person, or from a model (--alt-text claude)", "image-alt", "img"
+        ),
     )
 
 

@@ -1,19 +1,21 @@
 from __future__ import annotations
 
+import base64
 import json
 from collections import Counter
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from allymend import __version__
 from allymend.core.rules import CRITERIA, RULES, Remediability
 from allymend.core.summary import count_by_rule
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping, Sequence
     from pathlib import Path
 
     from pydantic.main import IncEx
 
-    from allymend.core.models import FixPlan, PageResult, ScanResult
+    from allymend.core.models import FixPlan, PageResult, ScanResult, Slot
     from allymend.core.summary import RuleCount
 
 SCHEMA_VERSION = 1
@@ -92,6 +94,29 @@ def render_evidence(result: ScanResult, plan: FixPlan) -> str:
     return json.dumps(document, indent=2, ensure_ascii=False) + "\n"
 
 
+def render_payloads(requests: Sequence[tuple[Slot, Mapping[str, Any]]]) -> str:
+    """Show what would be sent to a model for each slot, with images summarised."""
+    if not requests:
+        return "Nothing would be sent: no image needs alt text that allymend can fix.\n"
+    first = requests[0][1]
+    lines = [
+        f"Would send {_count(len(requests), 'request')} to {first['model']}. "
+        "Nothing has been sent.",
+        "",
+        "Instructions sent with every request:",
+        *(f"  {line}" if line else "" for line in str(first["system"]).splitlines()),
+    ]
+    for number, (slot, request) in enumerate(requests, start=1):
+        lines += ["", f"{number}. {slot.page}: {' >>> '.join(slot.target)}"]
+        for block in request["messages"][0]["content"]:
+            if block["type"] == "image":
+                size = len(base64.b64decode(block["source"]["data"]))
+                lines.append(f"   image: {block['source']['media_type']}, {size:,} bytes")
+            else:
+                lines += [f"   {line}" if line else "" for line in block["text"].splitlines()]
+    return "\n".join(lines) + "\n"
+
+
 def render_fix_summary(
     result: ScanResult, plan: FixPlan, patch_file: Path, evidence_file: Path | None = None
 ) -> str:
@@ -109,6 +134,14 @@ def render_fix_summary(
         lines = [f"No problems found, so {patch_file} is empty."]
     if evidence_file is not None:
         lines.append(f"The checks behind every fix are in {evidence_file}.")
+    written = [fix for fix in plan.fixes if fix.value is not None]
+    if written:
+        lines += ["", "Text written by a model; read each one before applying the patch:"]
+        lines += [
+            f'  {fix.page}: "{fix.value.text}" ({fix.value.source})'
+            for fix in written
+            if fix.value is not None
+        ]
     left = Counter((item.page, item.rule_id, item.reason) for item in plan.unfixed)
     if left:
         lines += ["", f"Not fixed ({_count(len(plan.unfixed), 'problem')}):"]
