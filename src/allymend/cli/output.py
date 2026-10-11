@@ -142,18 +142,33 @@ def render_fix_summary(
             for fix in written
             if fix.value is not None
         ]
+    solved = Counter((item.page, item.rule_id) for item in plan.resolved)
+    if solved:
+        lines += [
+            "",
+            f"Also gone once these fixes were applied ({_count(len(plan.resolved), 'problem')}):",
+        ]
+        lines += [
+            f"  {page}: {_rule_name(rule_id)}, {_count(elements, 'element')}"
+            for (page, rule_id), elements in solved.items()
+        ]
     left = Counter((item.page, item.rule_id, item.reason) for item in plan.unfixed)
     if left:
         lines += ["", f"Not fixed ({_count(len(plan.unfixed), 'problem')}):"]
-        for (page, rule_id, reason), elements in left.items():
-            rule = RULES.get(rule_id)
-            name = f"{rule.title} ({rule_id})" if rule is not None else rule_id
-            lines.append(f"  {page}: {name}, {_count(elements, 'element')}: {reason}")
+        lines += [
+            f"  {page}: {_rule_name(rule_id)}, {_count(elements, 'element')}: {reason}"
+            for (page, rule_id, reason), elements in left.items()
+        ]
     failed = [page for page in result.pages if page.error is not None]
     if failed:
         lines += ["", "Not scanned:"]
         lines += [f"  {page.page}: {page.error}" for page in failed]
     return "\n".join(lines) + "\n"
+
+
+def _rule_name(rule_id: str) -> str:
+    rule = RULES.get(rule_id)
+    return f"{rule.title} ({rule_id})" if rule is not None else rule_id
 
 
 def _overview_row(page: PageResult) -> str:

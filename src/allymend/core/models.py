@@ -196,6 +196,23 @@ class Unfixed(_Model):
     reason: str
 
 
+class Resolved(_Model):
+    """An occurrence no fix was aimed at, which was gone once its page's fixes were applied.
+
+    For example, a link whose only content is an image gets its name from the alt text a fix
+    gives the image.
+
+    Attributes:
+        rule_id: The axe-core rule the occurrence failed.
+        page: The page it was found on.
+        target: The occurrence's CSS selectors.
+    """
+
+    rule_id: str
+    page: str
+    target: tuple[str, ...]
+
+
 class FileChange(_Model):
     """What the fixes do to one source file.
 
@@ -253,12 +270,15 @@ class FixPlan(_Model):
         unfixed: Occurrences without a fix, in scan order.
         changes: What the fixes do to each file, in path order.
         verifications: Evidence from checking the changes, once they have been checked.
+        resolved: Occurrences without a fix that the checked changes made go away, in scan
+            order.
     """
 
     fixes: tuple[Fix, ...]
     unfixed: tuple[Unfixed, ...]
     changes: tuple[FileChange, ...]
     verifications: tuple[Verification, ...] = ()
+    resolved: tuple[Resolved, ...] = ()
 
     @property
     def patch(self) -> str:

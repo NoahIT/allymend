@@ -8,7 +8,7 @@ from urllib.parse import quote
 
 from justhtml import JustHTML
 
-from allymend.core.models import Check, Unfixed, Verification
+from allymend.core.models import Check, Resolved, Unfixed, Verification
 from allymend.scanner import open_browser
 from allymend.scanner.site import serve
 
@@ -24,6 +24,8 @@ logger = logging.getLogger(__name__)
 _ROLE = re.compile(r"^\s*- ([^\s:\"]+)")
 _SPACE = re.compile(r"\s+")
 
+type _Key = tuple[str, tuple[str, ...]]
+
 
 def verify_fixes(root: Path, plan: FixPlan, options: ScanOptions | None = None) -> FixPlan:
     """Check every planned change in a browser before trusting it.
@@ -35,24 +37,31 @@ def verify_fixes(root: Path, plan: FixPlan, options: ScanOptions | None = None) 
 
     Returns the plan with only the changes that passed. The fixes in files that failed move to
     ``unfixed`` with the reason, and the evidence for every file is in ``verifications``.
+    Occurrences in ``unfixed`` that a passing file's fixes made go away move to ``resolved``.
     """
     if not plan.changes:
         return plan
     verifications = []
+    gone: dict[str, set[_Key]] = {}
     with serve(root) as base_url, open_browser(options) as browser:
         for change in plan.changes:
             logger.info("checking the fixes in %s", change.file)
             fixes = [fix for fix in plan.fixes if _touches(fix, change.file)]
-            verification = _verify(browser, base_url + quote(change.file), change, fixes)
-            if not verification.passed:
+            verification, solved = _verify(browser, base_url + quote(change.file), change, fixes)
+            if verification.passed:
+                gone[change.file] = solved
+            else:
                 logger.warning("rejected the fixes in %s", change.file)
             verifications.append(verification)
     failed = {v.file: _reason(v) for v in verifications if not v.passed}
     rejected = [fix for fix in plan.fixes if any(_touches(fix, file) for file in failed)]
+    resolved = [
+        item for item in plan.unfixed if (item.rule_id, item.target) in gone.get(item.page, ())
+    ]
     return plan.model_copy(
         update={
             "fixes": tuple(fix for fix in plan.fixes if fix not in rejected),
-            "unfixed": plan.unfixed
+            "unfixed": tuple(item for item in plan.unfixed if item not in resolved)
             + tuple(
                 Unfixed(
                     rule_id=fix.rule_id,
@@ -64,14 +73,20 @@ def verify_fixes(root: Path, plan: FixPlan, options: ScanOptions | None = None) 
             ),
             "changes": tuple(change for change in plan.changes if change.file not in failed),
             "verifications": tuple(verifications),
+            "resolved": tuple(
+                Resolved(rule_id=item.rule_id, page=item.page, target=item.target)
+                for item in resolved
+            ),
         }
     )
 
 
 def _verify(
     browser: BrowserSession, url: str, change: FileChange, fixes: Sequence[Fix]
-) -> Verification:
+) -> tuple[Verification, set[_Key]]:
+    """Check one file's fixes, and say which occurrences were gone once they were applied."""
     checks = [_check_edits(change)]
+    gone: set[_Key] = set()
     if checks[-1].passed:
         before = browser.scan(change.file, url, tree=True)
         after = browser.scan(change.file, url, html=change.after, tree=True)
@@ -82,7 +97,8 @@ def _verify(
                 _check_no_new_problems(before.result, after.result),
                 _check_tree(before.tree or "", after.tree or ""),
             ]
-    return Verification(file=change.file, checks=tuple(checks))
+            gone = _keys(before.result) - _keys(after.result)
+    return Verification(file=change.file, checks=tuple(checks)), gone
 
 
 def _check_edits(change: FileChange) -> Check:
@@ -139,7 +155,7 @@ def _check_scanned(before: PageResult, after: PageResult) -> Check:
 
 
 def _check_fixed(after: PageResult, fixes: Sequence[Fix]) -> Check:
-    remaining = {(o.rule_id, o.target) for o in after.occurrences}
+    remaining = _keys(after)
     still = [
         f"{fix.rule_id} on {_selector(fix.target)}"
         for fix in fixes
@@ -151,7 +167,7 @@ def _check_fixed(after: PageResult, fixes: Sequence[Fix]) -> Check:
 
 
 def _check_no_new_problems(before: PageResult, after: PageResult) -> Check:
-    known = {(o.rule_id, o.target) for o in before.occurrences}
+    known = _keys(before)
     new = [
         f"{o.rule_id} on {_selector(o.target)}"
         for o in after.occurrences
@@ -172,6 +188,10 @@ def _check_tree(before: str, after: str) -> Check:
 
 def _roles(tree: str) -> Counter[str]:
     return Counter(match.group(1) for line in tree.splitlines() if (match := _ROLE.match(line)))
+
+
+def _keys(page: PageResult) -> set[_Key]:
+    return {(o.rule_id, o.target) for o in page.occurrences}
 
 
 def _touches(fix: Fix, file: str) -> bool:

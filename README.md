@@ -50,7 +50,7 @@ So far allymend can fix one problem on its own: a missing page language.
 poetry run allymend fix path/to/site --lang en
 ```
 
-This scans the folder, checks each fix as described in step 4 above, and writes the fixes that pass to `allymend.patch`; your files aren't changed. Everything it couldn't fix, including fixes that failed a check, is listed with the reason. Review the patch, then apply it with `git apply allymend.patch` from the folder you ran allymend in. Add `--evidence checks.json` to keep a record of every check.
+This scans the folder, checks each fix as described in step 4 above, and writes the fixes that pass to `allymend.patch`; your files aren't changed. Everything it couldn't fix, including fixes that failed a check, is listed with the reason. Problems that weren't fixed directly but were gone from the page once its fixes were applied are listed separately. Review the patch, then apply it with `git apply allymend.patch` from the folder you ran allymend in. Add `--evidence checks.json` to keep a record of every check.
 
 ### Alt text written by Claude
 
@@ -65,7 +65,7 @@ poetry run allymend fix path/to/site --alt-text claude
 
 For each image, Claude receives the image as the browser shows it and the text around it: the page title, the nearest heading, a caption, the link the image is in and nearby text, each cut to 200 characters. Nothing else from your project is sent. `--show-payload` prints exactly that for every image and stops without sending anything.
 
-The text Claude writes is checked like any other fix and listed in the summary. Read it before applying the patch. When Claude thinks an image is decorative, allymend leaves it for you to decide, because `alt=""` hides an image from screen readers. The model is `claude-opus-5-5` unless you choose another with `--model`.
+The text Claude writes is checked like any other fix and listed in the summary. Read it before applying the patch. When an image is all a link contains, its alt text also names the link, so Claude is asked to say where the link goes, and the summary lists the link's problem as gone too. When Claude thinks an image is decorative, allymend leaves it for you to decide, because `alt=""` hides an image from screen readers. The model is `claude-opus-5-5` unless you choose another with `--model`.
 
 ## Development
 

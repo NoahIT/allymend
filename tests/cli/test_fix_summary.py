@@ -1,7 +1,17 @@
 from pathlib import Path
 
 from allymend.cli.output import render_fix_summary, render_payloads
-from allymend.core.models import Edit, Fix, FixPlan, PageResult, ScanResult, Slot, Unfixed, Value
+from allymend.core.models import (
+    Edit,
+    Fix,
+    FixPlan,
+    PageResult,
+    Resolved,
+    ScanResult,
+    Slot,
+    Unfixed,
+    Value,
+)
 
 PATCH = Path("allymend.patch")
 
@@ -59,6 +69,28 @@ def test_lists_text_written_by_a_model() -> None:
         "",
         "Text written by a model; read each one before applying the patch:",
         '  shop.html: "A blue mug" (claude-opus-5-5)',
+    ]
+
+
+def test_lists_problems_the_fixes_also_solved() -> None:
+    plan = FixPlan(
+        fixes=(fix("shop.html"),),
+        unfixed=(left("shop.html", "button-name", "button", "there's no automatic fix"),),
+        changes=(),
+        resolved=(
+            Resolved(rule_id="link-name", page="shop.html", target=("a.home",)),
+            Resolved(rule_id="link-name", page="shop.html", target=("a.cart",)),
+            Resolved(rule_id="region", page="shop.html", target=("p",)),
+        ),
+    )
+    assert render_fix_summary(result(), plan, PATCH).splitlines()[2:] == [
+        "",
+        "Also gone once these fixes were applied (3 problems):",
+        "  shop.html: Link has no name (link-name), 2 elements",
+        "  shop.html: region, 1 element",
+        "",
+        "Not fixed (1 problem):",
+        "  shop.html: Button has no name (button-name), 1 element: there's no automatic fix",
     ]
 
 
