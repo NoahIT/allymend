@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import logging
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -11,13 +12,13 @@ from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 from playwright.sync_api import sync_playwright
 
 from allymend import __version__
-from allymend.core.models import PageResult, ScanResult
+from allymend.core.models import Capture, PageResult, ScanResult
 from allymend.errors import AxeResultError, BrowserNotInstalledError, InvalidURLError, NoPagesError
 from allymend.scanner.axe import AXE_VERSION, WCAG_TAGS, axe_source, parse_violations
 from allymend.scanner.site import find_pages, serve
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator, Sequence
+    from collections.abc import Iterable, Iterator, Sequence
     from pathlib import Path
 
     from playwright.sync_api import Browser, BrowserContext, Page, Playwright, Route
@@ -26,6 +27,64 @@ logger = logging.getLogger(__name__)
 
 _FIRST_HTTP_ERROR = 400
 _POLL_MS = 100
+_MAX_IMAGE_BYTES = 3_500_000
+_MAX_CONTEXT_CHARACTERS = 200
+_JPEG_DATA_URL = "data:image/jpeg;base64,"
+
+_DECODED_IMAGE = """
+async element => {
+  if (!(element instanceof HTMLImageElement)) return null;
+  element.scrollIntoView({ block: "center" });
+  if (!element.complete) {
+    await new Promise(resolve => {
+      element.addEventListener("load", resolve, { once: true });
+      element.addEventListener("error", resolve, { once: true });
+      setTimeout(resolve, 5000);
+    });
+  }
+  const width = element.naturalWidth;
+  const height = element.naturalHeight;
+  if (!width || !height) return null;
+  const scale = Math.min(1, 1568 / Math.max(width, height));
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.round(width * scale));
+  canvas.height = Math.max(1, Math.round(height * scale));
+  const context = canvas.getContext("2d");
+  context.fillStyle = "#fff";
+  context.fillRect(0, 0, canvas.width, canvas.height);
+  context.drawImage(element, 0, 0, canvas.width, canvas.height);
+  try {
+    return canvas.toDataURL("image/jpeg", 0.9);
+  } catch {
+    return null;
+  }
+}
+"""
+
+_CONTEXT = """
+element => {
+  const text = node =>
+    (node ? node.innerText || node.textContent || "" : "").replace(/\\s+/g, " ").trim();
+  const link = element.closest("a[href]");
+  const figure = element.closest("figure");
+  let heading = null;
+  for (const candidate of document.querySelectorAll("h1, h2, h3, h4, h5, h6")) {
+    if (candidate.compareDocumentPosition(element) & Node.DOCUMENT_POSITION_FOLLOWING) {
+      heading = candidate;
+    }
+  }
+  const source = element.getAttribute("src") || "";
+  return {
+    "page title": document.title,
+    "heading": text(heading),
+    "caption": text(figure && figure.querySelector("figcaption")),
+    "link": link ? link.getAttribute("href") : "",
+    "link text": text(link),
+    "file name": source.startsWith("data:") ? "" : source.split(/[?#]/)[0].split("/").pop(),
+    "nearby text": text(element.parentElement),
+  };
+}
+"""
 
 _RUN_AXE = """
 options => {
@@ -162,6 +221,50 @@ class BrowserSession:
             page.close()
         return PageScan(PageResult(page=name, error=error))
 
+    def capture(
+        self, url: str, targets: Iterable[tuple[str, ...]]
+    ) -> dict[tuple[str, ...], Capture]:
+        """Load the page at ``url`` and capture the elements that ``targets`` point to.
+
+        Each capture holds what the element shows and the text around it, such as the link it
+        is in or the nearest heading. For an image element that is the image as the browser
+        decoded it, so styles and animations don't change it; images the page can't read back,
+        such as ones from other sites, and other elements get a screenshot instead. Elements in
+        frames or shadow roots, and elements that can't be found or shown, are left out.
+        """
+        page = self._context.new_page()
+        page.set_default_timeout(self._options.timeout_ms)
+        captures: dict[tuple[str, ...], Capture] = {}
+        try:
+            page.goto(url, wait_until="load")
+            for target in targets:
+                if len(target) != 1:
+                    continue
+                element = page.locator(target[0]).first
+                try:
+                    if not element.is_visible():
+                        continue
+                    context = element.evaluate(_CONTEXT)
+                    decoded = element.evaluate(_DECODED_IMAGE)
+                    if isinstance(decoded, str) and decoded.startswith(_JPEG_DATA_URL):
+                        image = base64.b64decode(decoded.removeprefix(_JPEG_DATA_URL))
+                        media_type = "image/jpeg"
+                    else:
+                        image = element.screenshot(type="png", animations="disabled")
+                        media_type = "image/png"
+                except PlaywrightError:
+                    continue
+                captures[target] = Capture(
+                    image=image if len(image) <= _MAX_IMAGE_BYTES else None,
+                    media_type=media_type,
+                    context=_bounded(context),
+                )
+        except PlaywrightError as error:
+            logger.warning("could not capture elements on %s: %s", url, _first_line(error.message))
+        finally:
+            page.close()
+        return captures
+
     def _check(self, page: Page, name: str, *, tree: bool) -> PageScan:
         timeout = self._options.timeout_ms
         snapshot = page.locator(":root").aria_snapshot(timeout=timeout) if tree else None
@@ -225,6 +328,20 @@ def _user_agent(browser: Browser) -> str:
     finally:
         page.close()
     return f"{default} allymend/{__version__}"
+
+
+def _bounded(context: object) -> dict[str, str]:
+    if not isinstance(context, dict):
+        return {}
+    bounded = {}
+    for name, value in context.items():
+        if isinstance(name, str) and isinstance(value, str) and value.strip():
+            text = value.strip()
+            if len(text) > _MAX_CONTEXT_CHARACTERS:
+                cut = text[: _MAX_CONTEXT_CHARACTERS - 3]
+                text = (cut.rsplit(" ", 1)[0] if " " in cut else cut).rstrip() + "..."
+            bounded[name] = text
+    return bounded
 
 
 def _first_line(message: str) -> str:

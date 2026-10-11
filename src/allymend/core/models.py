@@ -104,15 +104,18 @@ class ScanResult(_Model):
 
 
 class Capture(_Model):
-    """How an element looked in the browser, and the text around it.
+    """What an element shows in the browser, and the text around it.
 
     Attributes:
-        image: A PNG screenshot of the element. Left out of serialized output.
+        image: For an image element, the image as the browser decoded it, scaled to fit 1568
+            pixels; otherwise a screenshot of the element. Left out of serialized output.
+        media_type: The image's format, ``image/jpeg`` or ``image/png``.
         context: Nearby text that helps describe the element, by kind, for example ``link`` for
             the address of a link the element is in.
     """
 
     image: bytes | None = Field(default=None, exclude=True, repr=False)
+    media_type: str = "image/png"
     context: dict[str, str] = Field(default_factory=dict)
 
 
@@ -127,8 +130,9 @@ class Slot(_Model):
         html: The element's opening markup as rendered in the browser.
         language: The page's language tag, if known.
         context: Nearby text that helps describe the element, as in ``Capture``.
-        image: The element as rendered, as PNG, if it was captured. Left out of serialized
-            output.
+        image: What the element shows, as in ``Capture``, if it was captured. Left out of
+            serialized output.
+        media_type: The image's format, as in ``Capture``.
         max_length: The longest acceptable text.
     """
 
@@ -140,6 +144,7 @@ class Slot(_Model):
     language: str | None = None
     context: dict[str, str] = Field(default_factory=dict)
     image: bytes | None = Field(default=None, exclude=True, repr=False)
+    media_type: str = "image/png"
     max_length: int = 150
 
 

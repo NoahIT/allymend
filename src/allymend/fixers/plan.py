@@ -112,6 +112,7 @@ def _image_alt(request: _Request) -> tuple[Edit, Value | None]:
         language=request.language or request.options.language,
         context=capture.context,
         image=capture.image,
+        media_type=capture.media_type,
     )
     value = request.options.values.fill(slot)
     alt = check_alt_text(value.text, slot.max_length)
