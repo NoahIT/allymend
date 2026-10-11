@@ -12,7 +12,7 @@ Every fix also has to be verified by rebuilding and rescanning the project. The 
 
 ## Decision
 
-Pataisa is a Python library with a typed API: scan, map, plan fixes, apply, verify. It runs as a single process on the user's machine or in their CI. The command line tool, and later an MCP server for coding agents and CI integrations, are thin layers over that API. There's no server, queue or database.
+Allymend is a Python library with a typed API: scan, map, plan fixes, apply, verify. It runs as a single process on the user's machine or in their CI. The command line tool, and later an MCP server for coding agents and CI integrations, are thin layers over that API. There's no server, queue or database.
 
 The versioned JSON output is the public contract. Terminal output, HTML reports, SARIF and patch descriptions are all generated from it.
 

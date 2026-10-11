@@ -1,9 +1,9 @@
 import json
 
-from pataisa import __version__
-from pataisa.cli.output import LIMITS_NOTE, render_json, render_markdown, render_text
-from pataisa.core.models import Impact, Occurrence, PageResult, ScanResult, SourceLocation
-from pataisa.core.rules import RULES
+from allymend import __version__
+from allymend.cli.output import LIMITS_NOTE, render_json, render_markdown, render_text
+from allymend.core.models import Impact, Occurrence, PageResult, ScanResult, SourceLocation
+from allymend.core.rules import RULES
 
 MISSING_ALT = Occurrence(
     rule_id="image-alt",
@@ -213,7 +213,7 @@ def test_json_is_versioned_and_leaves_out_markup() -> None:
     document = json.loads(render_json(RESULT))
 
     assert document["schema_version"] == 1
-    assert document["pataisa_version"] == __version__
+    assert document["allymend_version"] == __version__
     assert document["axe_version"] == "4.13.0"
     occurrence = document["pages"][0]["occurrences"][0]
     assert occurrence["rule_id"] == "image-alt"

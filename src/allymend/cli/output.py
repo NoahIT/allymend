@@ -1,17 +1,20 @@
 from __future__ import annotations
 
 import json
+from collections import Counter
 from typing import TYPE_CHECKING
 
-from pataisa import __version__
-from pataisa.core.rules import CRITERIA, RULES, Remediability
-from pataisa.core.summary import count_by_rule
+from allymend import __version__
+from allymend.core.rules import CRITERIA, RULES, Remediability
+from allymend.core.summary import count_by_rule
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from pydantic.main import IncEx
 
-    from pataisa.core.models import PageResult, ScanResult
-    from pataisa.core.summary import RuleCount
+    from allymend.core.models import FixPlan, PageResult, ScanResult
+    from allymend.core.summary import RuleCount
 
 SCHEMA_VERSION = 1
 LIMITS_NOTE = (
@@ -43,7 +46,7 @@ def render_json(result: ScanResult, *, include_markup: bool = False) -> str:
     )
     document = {
         "schema_version": SCHEMA_VERSION,
-        "pataisa_version": __version__,
+        "allymend_version": __version__,
         **result.model_dump(mode="json", exclude=exclude),
     }
     return json.dumps(document, indent=2, ensure_ascii=False) + "\n"
@@ -75,6 +78,48 @@ def render_markdown(result: ScanResult) -> str:
             for count in count_by_rule(page.occurrences)
         )
     lines.extend(["", _summary(result), "", LIMITS_NOTE])
+    return "\n".join(lines) + "\n"
+
+
+def render_evidence(result: ScanResult, plan: FixPlan) -> str:
+    """Render a checked fix plan as versioned JSON: the fixes, what was left, and the checks."""
+    document = {
+        "schema_version": SCHEMA_VERSION,
+        "allymend_version": __version__,
+        "axe_version": result.axe_version,
+        **plan.model_dump(mode="json"),
+    }
+    return json.dumps(document, indent=2, ensure_ascii=False) + "\n"
+
+
+def render_fix_summary(
+    result: ScanResult, plan: FixPlan, patch_file: Path, evidence_file: Path | None = None
+) -> str:
+    """Summarise what a fix run wrote to ``patch_file`` and what it left for a person."""
+    files = {edit.file for fix in plan.fixes for edit in fix.edits}
+    if plan.fixes:
+        lines = [
+            f"Wrote fixes for {_count(len(plan.fixes), 'problem')} in "
+            f"{_count(len(files), 'file')} to {patch_file}. Each was checked in a browser first.",
+            f"Review it, then apply it from this folder with: git apply {patch_file}",
+        ]
+    elif plan.unfixed:
+        lines = [f"Nothing could be fixed automatically, so {patch_file} is empty."]
+    else:
+        lines = [f"No problems found, so {patch_file} is empty."]
+    if evidence_file is not None:
+        lines.append(f"The checks behind every fix are in {evidence_file}.")
+    left = Counter((item.page, item.rule_id, item.reason) for item in plan.unfixed)
+    if left:
+        lines += ["", f"Not fixed ({_count(len(plan.unfixed), 'problem')}):"]
+        for (page, rule_id, reason), elements in left.items():
+            rule = RULES.get(rule_id)
+            name = f"{rule.title} ({rule_id})" if rule is not None else rule_id
+            lines.append(f"  {page}: {name}, {_count(elements, 'element')}: {reason}")
+    failed = [page for page in result.pages if page.error is not None]
+    if failed:
+        lines += ["", "Not scanned:"]
+        lines += [f"  {page.page}: {page.error}" for page in failed]
     return "\n".join(lines) + "\n"
 
 

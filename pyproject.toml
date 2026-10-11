@@ -1,5 +1,5 @@
 [project]
-name = "pataisa"
+name = "allymend"
 version = "0.1.0"
 description = "Finds accessibility problems, explains them in plain language and proposes verified fixes to a site's source code."
 authors = [
@@ -15,7 +15,7 @@ dependencies = [
 ]
 
 [project.scripts]
-pataisa = "pataisa.cli:main"
+allymend = "allymend.cli:main"
 
 
 [build-system]
@@ -85,7 +85,7 @@ markers = ["browser: needs the Chromium build installed by Playwright"]
 
 [tool.coverage.run]
 branch = true
-source_pkgs = ["pataisa"]
+source_pkgs = ["allymend"]
 concurrency = ["greenlet", "thread"]
 
 [tool.coverage.report]

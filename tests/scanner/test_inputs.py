@@ -2,8 +2,8 @@ from pathlib import Path
 
 import pytest
 
-from pataisa.errors import InvalidURLError, NoPagesError
-from pataisa.scanner import scan_directory, scan_url, scan_urls
+from allymend.errors import InvalidURLError, NoPagesError
+from allymend.scanner import scan_directory, scan_url, scan_urls
 
 
 @pytest.mark.parametrize(

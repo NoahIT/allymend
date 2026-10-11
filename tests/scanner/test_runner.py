@@ -1,12 +1,13 @@
+import logging
 import socket
 from collections.abc import Callable
 from pathlib import Path
 
 import pytest
 
-from pataisa.errors import BrowserNotInstalledError
-from pataisa.scanner import scan_directory, scan_url, scan_urls
-from pataisa.scanner.site import serve
+from allymend.errors import BrowserNotInstalledError
+from allymend.scanner import ScanOptions, open_browser, scan_directory, scan_url, scan_urls
+from allymend.scanner.site import serve
 
 pytestmark = pytest.mark.browser
 
@@ -81,6 +82,22 @@ def test_scan_urls_scans_each_page_once_in_order(
     assert pages[1].occurrences == ()
 
 
+def test_logs_each_page_and_each_failure(
+    tmp_path: Path, write_page: Callable[..., Path], caplog: pytest.LogCaptureFixture
+) -> None:
+    write_page("index.html")
+    caplog.set_level(logging.INFO, logger="allymend")
+    with serve(tmp_path) as base_url:
+        home, missing = f"{base_url}index.html", f"{base_url}missing.html"
+        scan_urls([home, missing])
+    runner = "allymend.scanner.runner"
+    assert caplog.record_tuples == [
+        (runner, logging.INFO, f"scanning 1 of 2: {home}"),
+        (runner, logging.INFO, f"scanning 2 of 2: {missing}"),
+        (runner, logging.WARNING, f"could not scan {missing}: HTTP 404"),
+    ]
+
+
 def test_scan_url_reports_http_errors(tmp_path: Path) -> None:
     with serve(tmp_path) as base_url:
         [page] = scan_url(f"{base_url}missing.html").pages
@@ -92,6 +109,113 @@ def test_scan_url_reports_unreachable_hosts() -> None:
     [page] = scan_url(f"http://127.0.0.1:{unused_port()}/").pages
     assert page.error is not None
     assert "ERR_CONNECTION_REFUSED" in page.error
+
+
+@pytest.mark.parametrize(
+    "script",
+    [
+        "for (;;) {}",
+        "addEventListener('load', () => setTimeout(() => { for (;;) {} }, 0));",
+    ],
+    ids=["while-loading", "after-loading"],
+)
+def test_a_page_that_freezes_is_reported_and_the_scan_continues(
+    tmp_path: Path, write_page: Callable[..., Path], script: str
+) -> None:
+    write_page("frozen.html", f"<script>{script}</script>")
+    write_page("index.html", f'<img src="{PIXEL}">')
+
+    frozen, index = scan_directory(tmp_path, ScanOptions(timeout_ms=2000)).pages
+
+    assert frozen.error == "did not finish within 2 s"
+    assert index.error is None
+    assert [o.rule_id for o in index.occurrences] == ["image-alt"]
+
+
+def test_finds_problems_inside_same_origin_iframes(
+    tmp_path: Path, write_page: Callable[..., Path]
+) -> None:
+    write_page("index.html", '<iframe src="frame.html" title="Product photos"></iframe>')
+    write_page("frame.html", f'<img src="{PIXEL}">')
+
+    pages = {page.page: page for page in scan_directory(tmp_path).pages}
+
+    targets = [o.target for o in pages["index.html"].occurrences if o.rule_id == "image-alt"]
+    assert targets == [("iframe", "img")]
+
+
+@pytest.mark.parametrize(
+    ("replacement", "error"),
+    [
+        ("{ run: () => Promise.reject(new Error('blocked')) }", "axe-core failed: Error: blocked"),
+        (
+            "{ run: async () => ({ violations: 'none' }) }",
+            "axe-core returned results in an unexpected format",
+        ),
+    ],
+    ids=["rejects", "malformed-results"],
+)
+def test_reports_a_page_that_replaces_axe(
+    tmp_path: Path, write_page: Callable[..., Path], replacement: str, error: str
+) -> None:
+    write_page("index.html", f"<script>window.axe = {replacement};</script>")
+    [page] = scan_directory(tmp_path).pages
+    assert page.error == error
+    assert page.occurrences == ()
+
+
+def test_a_session_checks_replacement_content_with_the_folder_s_styles(
+    tmp_path: Path, write_page: Callable[..., Path]
+) -> None:
+    (tmp_path / "style.css").write_text("p { color: #ddd; background: #fff; }", encoding="utf-8")
+    path = write_page(
+        "index.html", '<link rel="stylesheet" href="style.css"><p>Sale</p>', lang=None
+    )
+    patched = path.read_text(encoding="utf-8").replace("<html>", '<html lang="en">')
+
+    with serve(tmp_path) as base_url, open_browser() as browser:
+        url = f"{base_url}index.html"
+        before = browser.scan("index.html", url).result
+        after = browser.scan("index.html", url, html=patched).result
+
+    assert sorted(o.rule_id for o in before.occurrences) == ["color-contrast", "html-has-lang"]
+    assert [o.rule_id for o in after.occurrences] == ["color-contrast"]
+
+
+def test_a_session_captures_the_accessibility_tree_when_asked(
+    tmp_path: Path, write_page: Callable[..., Path]
+) -> None:
+    write_page("index.html", f'<img src="{PIXEL}" alt="Mug">')
+    with serve(tmp_path) as base_url, open_browser() as browser:
+        url = f"{base_url}index.html"
+        plain = browser.scan("index.html", url)
+        with_tree = browser.scan("index.html", url, tree=True)
+    assert plain.tree is None
+    assert with_tree.tree is not None
+    assert '- heading "Test page" [level=1]' in with_tree.tree
+    assert '- img "Mug"' in with_tree.tree
+
+
+def test_a_session_reports_replacement_content_it_could_not_use(
+    tmp_path: Path, write_page: Callable[..., Path]
+) -> None:
+    write_page("index.html")
+    with serve(tmp_path) as base_url, open_browser() as browser:
+        scan = browser.scan("index.html", f"{base_url}./index.html", html="<p>Patched</p>")
+    assert scan.result.error == "the replacement content wasn't loaded"
+
+
+def test_a_session_gives_up_on_a_frozen_page_while_reading_its_tree(
+    tmp_path: Path, write_page: Callable[..., Path]
+) -> None:
+    write_page(
+        "index.html",
+        "<script>addEventListener('load', () => setTimeout(() => { for (;;) {} }, 0));</script>",
+    )
+    with serve(tmp_path) as base_url, open_browser(ScanOptions(timeout_ms=2000)) as browser:
+        scan = browser.scan("index.html", f"{base_url}index.html", tree=True)
+    assert scan.result.error == "did not finish within 2 s"
+    assert scan.tree is None
 
 
 def test_reports_a_missing_browser(

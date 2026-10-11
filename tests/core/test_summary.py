@@ -1,5 +1,5 @@
-from pataisa.core.models import Impact, Occurrence
-from pataisa.core.summary import RuleCount, count_by_rule
+from allymend.core.models import Impact, Occurrence
+from allymend.core.summary import RuleCount, count_by_rule
 
 
 def occurrence(

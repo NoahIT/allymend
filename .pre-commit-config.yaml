@@ -6,7 +6,7 @@ repos:
     rev: 3e8a8703264a2f4a69428a0aa4dcb512790b2c8c  # frozen: v6.0.0
     hooks:
       - id: check-added-large-files
-        exclude: ^src/pataisa/_vendor/axe-core/axe\.min\.js$
+        exclude: ^src/allymend/_vendor/axe-core/axe\.min\.js$
       - id: check-case-conflict
       - id: check-illegal-windows-names
       - id: check-merge-conflict

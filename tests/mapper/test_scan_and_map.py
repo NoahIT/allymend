@@ -3,8 +3,8 @@ from pathlib import Path
 
 import pytest
 
-from pataisa.mapper import map_sources
-from pataisa.scanner import scan_directory
+from allymend.mapper import map_sources
+from allymend.scanner import scan_directory
 
 pytestmark = pytest.mark.browser
 

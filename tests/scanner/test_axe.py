@@ -1,8 +1,8 @@
 import pytest
 
-from pataisa.core.models import Impact
-from pataisa.errors import AxeResultError
-from pataisa.scanner.axe import AXE_VERSION, axe_source, parse_violations
+from allymend.core.models import Impact
+from allymend.errors import AxeResultError
+from allymend.scanner.axe import AXE_VERSION, axe_source, parse_violations
 
 IMAGE_ALT = {
     "id": "image-alt",

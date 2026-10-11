@@ -1,18 +1,18 @@
 # Threat model
 
-Version 0, 2026-10-10. Most of pataisa isn't built yet, so this describes the design. I'll update it as each part lands.
+Version 0, 2026-10-10. Most of allymend isn't built yet, so this describes the design. I'll update it as each part lands.
 
-## What pataisa does
+## What allymend does
 
-Pataisa runs on a developer's machine or in their CI with that user's permissions. It serves a project's files to a headless browser, scans the pages, reads the source files, writes patched copies to a temporary directory and produces reports and patch files. Later versions add a URL scan mode, an MCP server for coding agents and optional language model calls (see [data-flow.md](data-flow.md)).
+Allymend runs on a developer's machine or in their CI with that user's permissions. It serves a project's files to a headless browser, scans the pages, reads the source files, writes patched copies to a temporary directory and produces reports and patch files. Later versions add a URL scan mode, an MCP server for coding agents and optional language model calls (see [data-flow.md](data-flow.md)).
 
 ## What needs protecting
 
-- The user's source code: pataisa must never change it on its own, and every patch must do what its report says.
+- The user's source code: allymend must never change it on its own, and every patch must do what its report says.
 - The user's machine: files outside the project, running processes, credentials.
 - Secrets inside the project or its environment.
 - Page content, which can include personal data on authenticated pages.
-- The pataisa repository and its releases.
+- The allymend repository and its releases.
 
 ## Trust boundaries
 
@@ -29,12 +29,12 @@ Pataisa runs on a developer's machine or in their CI with that user's permission
 
 | Threat | Mitigation |
 |---|---|
-| Page content steers pataisa, for example text that reads like instructions, or attributes naming files to edit. | Page data never chooses a file, a command or a URL. Source locations come from parsing the project's own files. Any location found in the page is checked against the project root before use. |
+| Page content steers allymend, for example text that reads like instructions, or attributes naming files to edit. | Page data never chooses a file, a command or a URL. Source locations come from parsing the project's own files. Any location found in the page is checked against the project root before use. |
 | A patch writes outside the project. | Paths are resolved and rejected if they leave the project root. Patches are applied only to a temporary copy; the user applies the final diff. |
 | A fix hides a problem instead of solving it (adding `aria-hidden`, removing an element). | The verifier rejects these edits and compares the accessibility tree before and after. Confidence comes from that evidence. |
 | An inserted value breaks out of its context, for example a label containing markup. | Values are escaped for where they go (attribute, text, JSX string) and limited in length. |
 | A hostile page attacks the browser or exhausts resources. | Headless Chromium with its sandbox; navigation and script timeouts; downloads refused; page count and size limits. |
-| Pointing pataisa at an untrusted project runs that project's build. | The build and serve commands come only from the user's config, never from scanned content. The docs say plainly that verifying fixes runs the project's build. |
+| Pointing allymend at an untrusted project runs that project's build. | The build and serve commands come only from the user's config, never from scanned content. The docs say plainly that verifying fixes runs the project's build. |
 | URL scan mode is used to reach internal services (SSRF). | Remote crawling blocks private, loopback and link-local addresses and cloud metadata endpoints, including after redirects. Local scans of `localhost` stay allowed because that's the main use. |
 | Secrets or page content end up in reports, logs or CI artifacts. | No page content is stored unless asked for. Authentication is held as a reference to a secret, never its value. Reports redact what they can. |
 | The HTML report runs script from a scanned page. | Everything taken from a page is escaped in the report, and the report sets a restrictive Content Security Policy. |
@@ -53,5 +53,6 @@ Pataisa runs on a developer's machine or in their CI with that user's permission
 
 ## Accepted risks for now
 
-- Pataisa runs with the user's full permissions. It doesn't sandbox the user's own build.
+- Allymend runs with the user's full permissions. It doesn't sandbox the user's own build.
 - Pages loaded in the browser can make their own network requests, as they would in any browser.
+- axe-core runs inside the page it checks, so a page can interfere with it, for example by replacing it or faking its results. Results that come back in the wrong shape are reported as an error, but a page that fakes plausible results can hide its own problems. This only affects that page's report.

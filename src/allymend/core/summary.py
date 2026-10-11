@@ -1,7 +1,7 @@
 from collections.abc import Iterable
 from dataclasses import dataclass
 
-from pataisa.core.models import Impact, Occurrence, SourceLocation
+from allymend.core.models import Impact, Occurrence, SourceLocation
 
 _SEVERITY = {Impact.MINOR: 1, Impact.MODERATE: 2, Impact.SERIOUS: 3, Impact.CRITICAL: 4}
 
