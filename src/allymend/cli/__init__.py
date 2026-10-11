@@ -13,24 +13,28 @@ from allymend.cli.output import (
     render_fix_summary,
     render_json,
     render_markdown,
+    render_payloads,
     render_text,
 )
 from allymend.errors import (
     AllymendError,
+    CannotFixError,
     FolderOutsideError,
     MixedTargetsError,
+    ModelError,
     NotAFolderError,
     UnknownTargetError,
 )
-from allymend.fixers import FixOptions, check_language_tag, plan_fixes
+from allymend.fixers import TEXT_RULES, FixOptions, check_language_tag, plan_fixes
 from allymend.mapper import map_sources
-from allymend.scanner import ScanOptions, scan_directory, scan_urls
+from allymend.scanner import ScanOptions, capture_elements, scan_directory, scan_urls
 from allymend.verifier import verify_fixes
 
 if TYPE_CHECKING:
     from collections.abc import Iterator, Sequence
 
-    from allymend.core.models import ScanResult
+    from allymend.core.models import ScanResult, Slot, Value
+    from allymend.llm.claude import ClaudeValues
 
 EXIT_CLEAN = 0
 EXIT_PROBLEMS = 1
@@ -44,7 +48,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     allymend could not run or a page could not be scanned. Progress, warnings and errors go to
     standard error.
     """
-    args = _parser().parse_args(argv)
+    parser = _parser()
+    args = parser.parse_args(argv)
+    if args.command == "fix" and args.show_payload and args.text_from is None:
+        parser.error("--show-payload needs --text-from")
     options = ScanOptions(timeout_ms=round(args.timeout * 1000))
     run = _run_fix if args.command == "fix" else _run_scan
     with _log_to_stderr(quiet=args.quiet):
@@ -77,14 +84,48 @@ def _run_fix(args: argparse.Namespace, options: ScanOptions) -> int:
     if not root.is_dir():
         raise NotAFolderError(args.folder)
     prefix = _patch_prefix(root)
+    writer = _text_writer(args)
     result = map_sources(root, scan_directory(root, options))
-    planned = plan_fixes(root, result, FixOptions(language=args.lang), path_prefix=prefix)
+    captures = {} if writer is None else capture_elements(root, result, TEXT_RULES, options)
+    if writer is not None and args.show_payload:
+        preview = _Preview()
+        fix_options = FixOptions(language=args.lang, values=preview)
+        plan_fixes(root, result, fix_options, path_prefix=prefix, captures=captures)
+        sys.stdout.write(render_payloads([(slot, writer.request(slot)) for slot in preview.slots]))
+        return EXIT_CLEAN
+    fix_options = FixOptions(language=args.lang, values=writer)
+    planned = plan_fixes(root, result, fix_options, path_prefix=prefix, captures=captures)
     plan = verify_fixes(root, planned, options)
     args.output.write_text(plan.patch, encoding="utf-8", newline="")
     if args.evidence is not None:
         args.evidence.write_text(render_evidence(result, plan), encoding="utf-8", newline="\n")
     sys.stdout.write(render_fix_summary(result, plan, args.output, args.evidence))
     return _exit_code(result)
+
+
+def _text_writer(args: argparse.Namespace) -> ClaudeValues | None:
+    if args.text_from is None:
+        return None
+    try:
+        from allymend.llm.claude import ClaudeValues  # noqa: PLC0415  only with the claude extra
+    except ImportError:
+        message = 'Claude support isn\'t installed; install it with: pip install "allymend[claude]"'
+        raise ModelError(message) from None
+    writer = ClaudeValues(model=args.model)
+    if not args.show_payload:
+        writer.check_credentials()
+    return writer
+
+
+class _Preview:
+    """A value source that only records the slots it is asked to fill."""
+
+    def __init__(self) -> None:
+        self.slots: list[Slot] = []
+
+    def fill(self, slot: Slot) -> Value:
+        self.slots.append(slot)
+        raise CannotFixError("not sent: --show-payload")
 
 
 def _patch_prefix(root: Path) -> str:
@@ -231,5 +272,23 @@ def _parser() -> argparse.ArgumentParser:
         type=Path,
         metavar="FILE",
         help="also write the checks behind each fix as JSON",
+    )
+    fix.add_argument(
+        "--text-from",
+        choices=["claude"],
+        help=(
+            "write missing text, such as alt text, with a language model; each element and the "
+            "text around it is sent to the model's provider"
+        ),
+    )
+    fix.add_argument(
+        "--model",
+        metavar="NAME",
+        help="the model that writes the text (default: claude-opus-5-5)",
+    )
+    fix.add_argument(
+        "--show-payload",
+        action="store_true",
+        help="with --text-from, show what would be sent, and stop without sending anything",
     )
     return parser

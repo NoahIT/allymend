@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import html
 import re
-import unicodedata
 from typing import TYPE_CHECKING
 
 from allymend.core.models import Edit
 from allymend.errors import CannotFixError
 from allymend.fixers.tags import start_tag_attributes
+from allymend.fixers.text import check_text
 
 if TYPE_CHECKING:
     from allymend.core.models import SourceLocation
@@ -20,21 +20,15 @@ def check_alt_text(text: str, max_length: int) -> str:
     """Return ``text`` with its whitespace collapsed, if it can be used as alt text.
 
     Raises:
-        CannotFixError: The text is empty, longer than ``max_length``, starts with words like
-            "image of" that screen readers already say, or contains control characters.
+        CannotFixError: The text is empty, longer than ``max_length``, contains control
+            characters, or starts with words like "image of" that screen readers already say.
     """
-    cleaned = " ".join(text.split())
-    if not cleaned:
-        raise CannotFixError("the suggested alt text is empty")
-    if len(cleaned) > max_length:
-        raise CannotFixError(f"the suggested alt text is longer than {max_length} characters")
+    cleaned = check_text(text, max_length, "alt text")
     if _REDUNDANT.match(cleaned):
         raise CannotFixError(
             'the suggested alt text starts with words like "image of", which screen readers '
             "already say"
         )
-    if any(unicodedata.category(character) == "Cc" for character in cleaned):
-        raise CannotFixError("the suggested alt text contains control characters")
     return cleaned
 
 

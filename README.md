@@ -6,7 +6,7 @@ The name joins "ally", the way a11y (accessibility) is often said, with "mend".
 
 ## Status
 
-Early development. Scanning works, and fixing has started. The first release, 0.1.0, will cover static HTML sites and three kinds of fixes: page language, viewport settings and form labels.
+Early development, for static HTML sites. Scanning works, and so do the first fixes: a missing page language, and alt text and names for links, buttons and form fields, written by Claude when you ask for them.
 
 ## How it works
 
@@ -23,7 +23,7 @@ Early development. Scanning works, and fixing has started. The first release, 0.
 
 - Tell you that your site is accessible or compliant with any law. Automated checks find only part of real accessibility problems. The rest needs people, including people who use assistive technology.
 - Patch pages in the browser at runtime. Allymend is not an overlay; it changes source code.
-- Invent content. Alt text, link names and similar text need your judgment, so those findings are marked as needing a person.
+- Write content on its own. Alt text, link names and similar text need judgment. Allymend drafts alt text and names for links, buttons and form fields only when you ask Claude to, and lists every draft for you to read; everything else is marked as needing a person.
 
 ## Trying it
 
@@ -50,7 +50,22 @@ So far allymend can fix one problem on its own: a missing page language.
 poetry run allymend fix path/to/site --lang en
 ```
 
-This scans the folder, checks each fix as described in step 4 above, and writes the fixes that pass to `allymend.patch`; your files aren't changed. Everything it couldn't fix, including fixes that failed a check, is listed with the reason. Review the patch, then apply it with `git apply allymend.patch` from the folder you ran allymend in. Add `--evidence checks.json` to keep a record of every check.
+This scans the folder, checks each fix as described in step 4 above, and writes the fixes that pass to `allymend.patch`; your files aren't changed. Everything it couldn't fix, including fixes that failed a check, is listed with the reason. Problems that weren't fixed directly but were gone from the page once its fixes were applied are listed separately. Review the patch, then apply it with `git apply allymend.patch` from the folder you ran allymend in. Add `--evidence checks.json` to keep a record of every check.
+
+### Text written by Claude
+
+Some fixes need words that a program can't know, such as alt text that describes an image, a name for a link or button that shows only an icon, or a name for a form field without a label. Allymend can ask Claude to write them. This is off unless you ask for it, and needs the `claude` extra and an Anthropic API key:
+
+```
+poetry install --all-extras
+$env:ANTHROPIC_API_KEY = "<your key>"     # export ANTHROPIC_API_KEY=... outside PowerShell
+poetry run allymend fix path/to/site --text-from claude --show-payload
+poetry run allymend fix path/to/site --text-from claude
+```
+
+For each image, link, button or form field, Claude receives a picture of it as the browser shows it and the text around it: the page title, the nearest heading, a caption, the link it is or is in and nearby text, each cut to 200 characters. Nothing else from your project is sent. `--show-payload` prints exactly that for every request and stops without sending anything.
+
+The text Claude writes is checked like any other fix and listed in the summary. Read it before applying the patch. A link, button or form field without a name gets an `aria-label`. When an image is all a link or button contains, the image's alt text names it instead, so Claude is asked to say where the link goes or what the button does, and the summary lists its problem as gone too. For a form field the `aria-label` is a stopgap: screen readers can now say what the field is for, but everyone else still needs a visible label, so add one when you can. When Claude can't tell what an element is for, it's left for you. When it thinks an image is decorative, allymend leaves that for you to decide too, because `alt=""` hides an image from screen readers. The model is `claude-opus-5-5` unless you choose another with `--model`.
 
 ## Development
 

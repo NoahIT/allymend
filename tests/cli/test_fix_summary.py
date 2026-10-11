@@ -1,7 +1,17 @@
 from pathlib import Path
 
-from allymend.cli.output import render_fix_summary
-from allymend.core.models import Edit, Fix, FixPlan, PageResult, ScanResult, Unfixed
+from allymend.cli.output import render_fix_summary, render_payloads
+from allymend.core.models import (
+    Edit,
+    Fix,
+    FixPlan,
+    PageResult,
+    Resolved,
+    ScanResult,
+    Slot,
+    Unfixed,
+    Value,
+)
 
 PATCH = Path("allymend.patch")
 
@@ -49,6 +59,107 @@ def test_lists_what_was_fixed_and_what_was_left() -> None:
         "Not scanned:",
         "  shop.html: HTTP 404",
     ]
+
+
+def test_lists_text_written_by_a_model() -> None:
+    value = Value(text="A blue mug", rationale="It shows a mug.", source="claude-opus-5-5")
+    alt = fix("shop.html").model_copy(update={"rule_id": "image-alt", "value": value})
+    link = alt.model_copy(
+        update={"rule_id": "link-name", "value": value.model_copy(update={"text": "Cart"})}
+    )
+    button = alt.model_copy(
+        update={"rule_id": "button-name", "value": value.model_copy(update={"text": "Search"})}
+    )
+    field = alt.model_copy(
+        update={"rule_id": "select-name", "value": value.model_copy(update={"text": "Size"})}
+    )
+    plan = FixPlan(fixes=(fix("index.html"), alt, link, button, field), unfixed=(), changes=())
+    assert render_fix_summary(result(), plan, PATCH).splitlines()[2:] == [
+        "",
+        "Text written by a model; read each one before applying the patch:",
+        '  shop.html: alt text "A blue mug" (claude-opus-5-5)',
+        '  shop.html: link name "Cart" (claude-opus-5-5)',
+        '  shop.html: button name "Search" (claude-opus-5-5)',
+        '  shop.html: field name "Size" (claude-opus-5-5)',
+    ]
+
+
+def test_lists_problems_the_fixes_also_solved() -> None:
+    plan = FixPlan(
+        fixes=(fix("shop.html"),),
+        unfixed=(left("shop.html", "button-name", "button", "there's no automatic fix"),),
+        changes=(),
+        resolved=(
+            Resolved(rule_id="link-name", page="shop.html", target=("a.home",)),
+            Resolved(rule_id="link-name", page="shop.html", target=("a.cart",)),
+            Resolved(rule_id="region", page="shop.html", target=("p",)),
+        ),
+    )
+    assert render_fix_summary(result(), plan, PATCH).splitlines()[2:] == [
+        "",
+        "Also gone once these fixes were applied (3 problems):",
+        "  shop.html: Link has no name (link-name), 2 elements",
+        "  shop.html: region, 1 element",
+        "",
+        "Not fixed (1 problem):",
+        "  shop.html: Button has no name (button-name), 1 element: there's no automatic fix",
+    ]
+
+
+def test_payloads_show_images_by_size_and_text_in_full() -> None:
+    request = {
+        "model": "claude-opus-5-5",
+        "system": "Write alt text.\n\nBe brief.",
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image",
+                        "source": {"type": "base64", "media_type": "image/jpeg", "data": "AAAA"},
+                    },
+                    {"type": "text", "text": "Alt text, please.\n\n<page_details>"},
+                ],
+            }
+        ],
+    }
+    image = Slot(kind="alt-text", rule_id="image-alt", page="a.html", target=("img",), html="")
+    link = Slot(kind="link-name", rule_id="link-name", page="a.html", target=("a",), html="")
+    link_request = {
+        "model": "claude-opus-5-5",
+        "system": "Name links.",
+        "messages": [{"role": "user", "content": [{"type": "text", "text": "Name it."}]}],
+    }
+    payloads = [(image, request), (link, link_request), (image, request)]
+    assert render_payloads(payloads).splitlines() == [
+        "Would send 3 requests to claude-opus-5-5. Nothing has been sent.",
+        "",
+        "Instructions sent with every alt-text request:",
+        "  Write alt text.",
+        "",
+        "  Be brief.",
+        "",
+        "Instructions sent with every link-name request:",
+        "  Name links.",
+        "",
+        "1. a.html: img",
+        "   image: image/jpeg, 3 bytes",
+        "   Alt text, please.",
+        "",
+        "   <page_details>",
+        "",
+        "2. a.html: a",
+        "   Name it.",
+        "",
+        "3. a.html: img",
+        "   image: image/jpeg, 3 bytes",
+        "   Alt text, please.",
+        "",
+        "   <page_details>",
+    ]
+    assert render_payloads([]) == (
+        "Nothing would be sent: no element needs text that allymend can fix.\n"
+    )
 
 
 def test_says_when_nothing_could_be_fixed() -> None:

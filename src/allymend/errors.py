@@ -70,6 +70,14 @@ class CannotFixError(AllymendError):
         self.reason = reason
 
 
+class ModelError(AllymendError):
+    """A language model can't be used at all, for example because its credentials are wrong."""
+
+    def __init__(self, reason: str) -> None:
+        super().__init__(reason)
+        self.reason = reason
+
+
 class BrowserNotInstalledError(AllymendError):
     """Playwright's Chromium build is missing."""
 

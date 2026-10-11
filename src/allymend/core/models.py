@@ -13,6 +13,9 @@ class Impact(StrEnum):
     CRITICAL = "critical"
 
 
+type TextKind = Literal["alt-text", "link-name", "button-name", "field-name"]
+
+
 class _Model(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -104,15 +107,18 @@ class ScanResult(_Model):
 
 
 class Capture(_Model):
-    """How an element looked in the browser, and the text around it.
+    """What an element shows in the browser, and the text around it.
 
     Attributes:
-        image: A PNG screenshot of the element. Left out of serialized output.
+        image: For an image element, the image as the browser decoded it, scaled to fit 1568
+            pixels; otherwise a screenshot of the element. Left out of serialized output.
+        media_type: The image's format, ``image/jpeg`` or ``image/png``.
         context: Nearby text that helps describe the element, by kind, for example ``link`` for
             the address of a link the element is in.
     """
 
     image: bytes | None = Field(default=None, exclude=True, repr=False)
+    media_type: str = "image/png"
     context: dict[str, str] = Field(default_factory=dict)
 
 
@@ -120,19 +126,21 @@ class Slot(_Model):
     """Text a fix needs that a person or a model has to write.
 
     Attributes:
-        kind: What the text is for. Only ``alt-text`` so far.
+        kind: What the text is for: ``alt-text`` for an image, ``link-name`` for a link,
+            ``button-name`` for a button, or ``field-name`` for a form field.
         rule_id: The axe-core rule the occurrence fails.
         page: The page it was found on.
         target: The occurrence's CSS selectors.
         html: The element's opening markup as rendered in the browser.
         language: The page's language tag, if known.
         context: Nearby text that helps describe the element, as in ``Capture``.
-        image: The element as rendered, as PNG, if it was captured. Left out of serialized
-            output.
+        image: What the element shows, as in ``Capture``, if it was captured. Left out of
+            serialized output.
+        media_type: The image's format, as in ``Capture``.
         max_length: The longest acceptable text.
     """
 
-    kind: Literal["alt-text"]
+    kind: TextKind
     rule_id: str
     page: str
     target: tuple[str, ...]
@@ -140,6 +148,7 @@ class Slot(_Model):
     language: str | None = None
     context: dict[str, str] = Field(default_factory=dict)
     image: bytes | None = Field(default=None, exclude=True, repr=False)
+    media_type: str = "image/png"
     max_length: int = 150
 
 
@@ -189,6 +198,23 @@ class Unfixed(_Model):
     page: str
     target: tuple[str, ...]
     reason: str
+
+
+class Resolved(_Model):
+    """An occurrence no fix was aimed at, which was gone once its page's fixes were applied.
+
+    For example, a link whose only content is an image gets its name from the alt text a fix
+    gives the image.
+
+    Attributes:
+        rule_id: The axe-core rule the occurrence failed.
+        page: The page it was found on.
+        target: The occurrence's CSS selectors.
+    """
+
+    rule_id: str
+    page: str
+    target: tuple[str, ...]
 
 
 class FileChange(_Model):
@@ -248,12 +274,15 @@ class FixPlan(_Model):
         unfixed: Occurrences without a fix, in scan order.
         changes: What the fixes do to each file, in path order.
         verifications: Evidence from checking the changes, once they have been checked.
+        resolved: Occurrences without a fix that the checked changes made go away, in scan
+            order.
     """
 
     fixes: tuple[Fix, ...]
     unfixed: tuple[Unfixed, ...]
     changes: tuple[FileChange, ...]
     verifications: tuple[Verification, ...] = ()
+    resolved: tuple[Resolved, ...] = ()
 
     @property
     def patch(self) -> str:

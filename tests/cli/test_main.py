@@ -1,10 +1,12 @@
 import logging
+import sys
 from pathlib import Path
 
 import pytest
 
 from allymend import __version__
 from allymend.cli import EXIT_ERROR, main
+from allymend.llm.claude import DEFAULT_MODEL
 
 
 def test_version(capsys: pytest.CaptureFixture[str]) -> None:
@@ -106,6 +108,44 @@ def test_fix_rejects_a_language_that_is_not_a_tag(
         main(["fix", str(tmp_path), "--lang", language])
     assert stop.value.code == EXIT_ERROR
     assert "is not a language tag such as en or en-GB" in capsys.readouterr().err
+
+
+def test_show_payload_needs_text_from(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    with pytest.raises(SystemExit) as stop:
+        main(["fix", str(tmp_path), "--show-payload"])
+    assert stop.value.code == EXIT_ERROR
+    assert "--show-payload needs --text-from" in capsys.readouterr().err
+
+
+def test_claude_without_credentials_stops_before_scanning(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    for name in ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_PROFILE"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.delenv("ANTHROPIC_CONFIG_DIR", raising=False)
+    for name in ("HOME", "USERPROFILE", "XDG_CONFIG_HOME", "APPDATA"):
+        monkeypatch.setenv(name, str(tmp_path))
+    monkeypatch.chdir(tmp_path)
+    assert main(["fix", ".", "--text-from", "claude"]) == EXIT_ERROR
+    assert capsys.readouterr().err.startswith("allymend: no Anthropic credentials were found; ")
+
+
+def test_claude_without_the_extra_says_how_to_install_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setitem(sys.modules, "allymend.llm.claude", None)
+    monkeypatch.chdir(tmp_path)
+    assert main(["fix", ".", "--text-from", "claude"]) == EXIT_ERROR
+    assert capsys.readouterr().err == (
+        "allymend: Claude support isn't installed; install it with: "
+        'pip install "allymend[claude]"\n'
+    )
+
+
+def test_the_documented_default_model_is_the_real_one(capsys: pytest.CaptureFixture[str]) -> None:
+    with pytest.raises(SystemExit):
+        main(["fix", "--help"])
+    assert f"(default:{DEFAULT_MODEL})" in "".join(capsys.readouterr().out.split())
 
 
 def test_leaves_logging_as_it_was(tmp_path: Path) -> None:

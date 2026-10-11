@@ -1,3 +1,4 @@
+from allymend.scanner.capture import capture_elements
 from allymend.scanner.runner import (
     BrowserSession,
     PageScan,
@@ -12,6 +13,7 @@ __all__ = [
     "BrowserSession",
     "PageScan",
     "ScanOptions",
+    "capture_elements",
     "open_browser",
     "scan_directory",
     "scan_url",

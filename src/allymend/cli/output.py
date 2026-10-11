@@ -1,19 +1,21 @@
 from __future__ import annotations
 
+import base64
 import json
 from collections import Counter
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from allymend import __version__
 from allymend.core.rules import CRITERIA, RULES, Remediability
 from allymend.core.summary import count_by_rule
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping, Sequence
     from pathlib import Path
 
     from pydantic.main import IncEx
 
-    from allymend.core.models import FixPlan, PageResult, ScanResult
+    from allymend.core.models import FixPlan, PageResult, ScanResult, Slot
     from allymend.core.summary import RuleCount
 
 SCHEMA_VERSION = 1
@@ -26,6 +28,13 @@ _FIX_TYPES = {
     Remediability.AUTO: "can be automated",
     Remediability.SUGGESTED: "a fix can be suggested, but a person should review it",
     Remediability.HUMAN: "needs a person to decide",
+}
+_WRITTEN = {
+    "image-alt": "alt text",
+    "link-name": "link name",
+    "button-name": "button name",
+    "label": "field name",
+    "select-name": "field name",
 }
 
 
@@ -92,6 +101,31 @@ def render_evidence(result: ScanResult, plan: FixPlan) -> str:
     return json.dumps(document, indent=2, ensure_ascii=False) + "\n"
 
 
+def render_payloads(requests: Sequence[tuple[Slot, Mapping[str, Any]]]) -> str:
+    """Show what would be sent to a model for each slot, with images summarised."""
+    if not requests:
+        return "Nothing would be sent: no element needs text that allymend can fix.\n"
+    lines = [
+        f"Would send {_count(len(requests), 'request')} to {requests[0][1]['model']}. "
+        "Nothing has been sent."
+    ]
+    instructions: dict[str, str] = {}
+    for slot, request in requests:
+        instructions.setdefault(slot.kind, str(request["system"]))
+    for kind, system in instructions.items():
+        lines += ["", f"Instructions sent with every {kind} request:"]
+        lines += [f"  {line}" if line else "" for line in system.splitlines()]
+    for number, (slot, request) in enumerate(requests, start=1):
+        lines += ["", f"{number}. {slot.page}: {' >>> '.join(slot.target)}"]
+        for block in request["messages"][0]["content"]:
+            if block["type"] == "image":
+                size = len(base64.b64decode(block["source"]["data"]))
+                lines.append(f"   image: {block['source']['media_type']}, {size:,} bytes")
+            else:
+                lines += [f"   {line}" if line else "" for line in block["text"].splitlines()]
+    return "\n".join(lines) + "\n"
+
+
 def render_fix_summary(
     result: ScanResult, plan: FixPlan, patch_file: Path, evidence_file: Path | None = None
 ) -> str:
@@ -109,18 +143,42 @@ def render_fix_summary(
         lines = [f"No problems found, so {patch_file} is empty."]
     if evidence_file is not None:
         lines.append(f"The checks behind every fix are in {evidence_file}.")
+    written = [fix for fix in plan.fixes if fix.value is not None]
+    if written:
+        lines += ["", "Text written by a model; read each one before applying the patch:"]
+        lines += [
+            f'  {fix.page}: {_WRITTEN.get(fix.rule_id, fix.rule_id)} "{fix.value.text}" '
+            f"({fix.value.source})"
+            for fix in written
+            if fix.value is not None
+        ]
+    solved = Counter((item.page, item.rule_id) for item in plan.resolved)
+    if solved:
+        lines += [
+            "",
+            f"Also gone once these fixes were applied ({_count(len(plan.resolved), 'problem')}):",
+        ]
+        lines += [
+            f"  {page}: {_rule_name(rule_id)}, {_count(elements, 'element')}"
+            for (page, rule_id), elements in solved.items()
+        ]
     left = Counter((item.page, item.rule_id, item.reason) for item in plan.unfixed)
     if left:
         lines += ["", f"Not fixed ({_count(len(plan.unfixed), 'problem')}):"]
-        for (page, rule_id, reason), elements in left.items():
-            rule = RULES.get(rule_id)
-            name = f"{rule.title} ({rule_id})" if rule is not None else rule_id
-            lines.append(f"  {page}: {name}, {_count(elements, 'element')}: {reason}")
+        lines += [
+            f"  {page}: {_rule_name(rule_id)}, {_count(elements, 'element')}: {reason}"
+            for (page, rule_id, reason), elements in left.items()
+        ]
     failed = [page for page in result.pages if page.error is not None]
     if failed:
         lines += ["", "Not scanned:"]
         lines += [f"  {page.page}: {page.error}" for page in failed]
     return "\n".join(lines) + "\n"
+
+
+def _rule_name(rule_id: str) -> str:
+    rule = RULES.get(rule_id)
+    return f"{rule.title} ({rule_id})" if rule is not None else rule_id
 
 
 def _overview_row(page: PageResult) -> str:

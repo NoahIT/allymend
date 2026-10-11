@@ -2,8 +2,11 @@ import json
 import os
 import shutil
 import subprocess
-from collections.abc import Callable
+import threading
+from collections.abc import Callable, Iterator
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from typing import Any, override
 
 import pytest
 
@@ -25,6 +28,134 @@ def site(tmp_path: Path, write_page: Callable[..., Path], monkeypatch: pytest.Mo
     return tmp_path / "site"
 
 
+@pytest.fixture
+def claude_requests(monkeypatch: pytest.MonkeyPatch) -> Iterator[list[Any]]:
+    """Point the Anthropic SDK at a local server that gives one answer for each kind of text."""
+    received: list[Any] = []
+    answers = {
+        "You write alternative text": {
+            "alt": "A blue mug",
+            "decorative": False,
+            "rationale": "The page sells it.",
+        },
+        "You name links": {"name": "Your cart", "unclear": False, "rationale": "A cart icon."},
+        "You name buttons": {"name": "Search", "unclear": False, "rationale": "A lens icon."},
+        "You name form fields": {"name": "Email", "unclear": False, "rationale": "Its type."},
+    }
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_POST(self) -> None:
+            request = json.loads(self.rfile.read(int(self.headers["content-length"])))
+            received.append(request)
+            answer = next(a for start, a in answers.items() if request["system"].startswith(start))
+            reply = {
+                "id": "msg_1",
+                "type": "message",
+                "role": "assistant",
+                "model": "claude-opus-5-5",
+                "content": [{"type": "text", "text": json.dumps(answer)}],
+                "stop_reason": "end_turn",
+                "stop_sequence": None,
+                "usage": {"input_tokens": 10, "output_tokens": 5},
+            }
+            data = json.dumps(reply).encode()
+            self.send_response(200)
+            self.send_header("content-type", "application/json")
+            self.send_header("content-length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+
+        @override
+        def log_message(self, format: str, *args: Any) -> None:
+            pass
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    monkeypatch.setenv("ANTHROPIC_BASE_URL", f"http://127.0.0.1:{server.server_port}")
+    try:
+        yield received
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+@pytest.mark.usefixtures("site")
+def test_alt_text_from_claude_is_checked_and_listed_for_review(
+    claude_requests: list[Any], capsys: pytest.CaptureFixture[str]
+) -> None:
+    code = main(["fix", "site", "--lang", "en", "--text-from", "claude", "--evidence", "e.json"])
+
+    assert code == EXIT_PROBLEMS
+    lines = capsys.readouterr().out.splitlines()
+    assert lines[0].startswith("Wrote fixes for 2 problems in 2 files to allymend.patch.")
+    assert lines[2:6] == [
+        "The checks behind every fix are in e.json.",
+        "",
+        "Text written by a model; read each one before applying the patch:",
+        '  shop/mug.html: alt text "A blue mug" (claude-opus-5-5)',
+    ]
+    assert 'alt="A blue mug"' in Path("allymend.patch").read_text(encoding="utf-8")
+    [request] = claude_requests
+    assert [block["type"] for block in request["messages"][0]["content"]] == ["image", "text"]
+    evidence = json.loads(Path("e.json").read_text(encoding="utf-8"))
+    values = [fix["value"] for fix in evidence["fixes"] if fix["value"]]
+    assert values == [
+        {"text": "A blue mug", "rationale": "The page sells it.", "source": "claude-opus-5-5"}
+    ]
+
+
+def test_controls_are_named_by_claude_or_by_their_image(
+    tmp_path: Path,
+    write_page: Callable[..., Path],
+    monkeypatch: pytest.MonkeyPatch,
+    claude_requests: list[Any],
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    write_page(
+        "controls/index.html",
+        '<a href="cart.html"><svg width="24" height="24"></svg></a> '
+        '<a href="shop.html"><img src="mug.png"></a> '
+        '<button type="button"><svg width="24" height="24"></svg></button> '
+        '<input type="email" name="email">',
+    )
+    monkeypatch.chdir(tmp_path)
+
+    assert main(["fix", "controls", "--text-from", "claude"]) == EXIT_PROBLEMS
+
+    lines = capsys.readouterr().out.splitlines()
+    assert lines[0].startswith("Wrote fixes for 4 problems in 1 file to allymend.patch.")
+    written = lines.index("Text written by a model; read each one before applying the patch:")
+    assert sorted(lines[written + 1 : written + 5]) == [
+        '  index.html: alt text "A blue mug" (claude-opus-5-5)',
+        '  index.html: button name "Search" (claude-opus-5-5)',
+        '  index.html: field name "Email" (claude-opus-5-5)',
+        '  index.html: link name "Your cart" (claude-opus-5-5)',
+    ]
+    gone = lines.index("Also gone once these fixes were applied (1 problem):")
+    assert lines[gone + 1] == "  index.html: Link has no name (link-name), 1 element"
+    patch = Path("allymend.patch").read_text(encoding="utf-8")
+    assert '<a aria-label="Your cart" href="cart.html">' in patch
+    assert '<img alt="A blue mug" src="mug.png">' in patch
+    assert '<button aria-label="Search" type="button">' in patch
+    assert '<input aria-label="Email" type="email" name="email">' in patch
+    assert len(claude_requests) == 4
+    [link] = [r for r in claude_requests if r["system"].startswith("You name links")]
+    assert [block["type"] for block in link["messages"][0]["content"]] == ["image", "text"]
+
+
+@pytest.mark.usefixtures("site")
+def test_show_payload_sends_nothing_and_writes_nothing(
+    claude_requests: list[Any], capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert main(["fix", "site", "--text-from", "claude", "--show-payload"]) == EXIT_CLEAN
+    lines = capsys.readouterr().out.splitlines()
+    assert lines[0] == "Would send 1 request to claude-opus-5-5. Nothing has been sent."
+    assert "1. shop/mug.html: img" in lines
+    assert claude_requests == []
+    assert not Path("allymend.patch").exists()
+
+
 @pytest.mark.skipif(GIT is None, reason="git is not installed")
 @pytest.mark.usefixtures("site")
 def test_the_patch_applies_and_fixes_the_page(
@@ -41,7 +172,7 @@ def test_the_patch_applies_and_fixes_the_page(
     ]
     assert (
         "  shop/mug.html: Image has no text alternative (image-alt), 1 element: "
-        "needs alt text from a person, or from a model"
+        "needs alt text from a person, or from a model (--text-from claude)"
     ) in lines
     assert (
         Path("allymend.patch")

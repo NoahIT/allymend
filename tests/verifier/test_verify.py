@@ -3,7 +3,16 @@ from pathlib import Path
 
 import pytest
 
-from allymend.core.models import Edit, FileChange, Fix, FixPlan
+from allymend.core.models import (
+    Edit,
+    FileChange,
+    Fix,
+    FixPlan,
+    Resolved,
+    Slot,
+    Unfixed,
+    Value,
+)
 from allymend.fixers import FixOptions, apply_edits, plan_fixes, unified_diff
 from allymend.mapper import map_sources
 from allymend.scanner import ScanOptions, scan_directory
@@ -15,6 +24,12 @@ PAGE = (
     "<!doctype html><html><head><meta charset='utf-8'><title>Shop</title></head>"
     f"<body><main><h1>Shop</h1>{IMAGE}</main></body></html>"
 )
+NO_LANGUAGE = Unfixed(rule_id="html-has-lang", page="index.html", target=("html",), reason="no")
+
+
+class Writer:
+    def fill(self, slot: Slot) -> Value:  # noqa: ARG002  every slot gets the same text
+        return Value(text="Mug shop", source="writer")
 
 
 def plan_for(replacements: Sequence[tuple[str, str]], file: str = "index.html") -> FixPlan:
@@ -192,6 +207,60 @@ def test_a_fix_that_fails_a_check_is_rejected(
     assert left.reason == f"rejected by the check after fixing: {reason}"
     [evidence] = verified.verifications
     assert [(c.name, c.detail) for c in evidence.checks if not c.passed] == [(check, reason)]
+
+
+@pytest.mark.browser
+def test_problems_that_go_away_with_the_fixes_are_resolved(
+    tmp_path: Path, write_page: Callable[..., Path]
+) -> None:
+    write_page(
+        "index.html", '<a href="shop.html"><img src="mug.png"></a><p style="color:#eee">Faint</p>'
+    )
+    planned = plan_fixes(
+        tmp_path, map_sources(tmp_path, scan_directory(tmp_path)), FixOptions(values=Writer())
+    )
+    left = {item.rule_id: item for item in planned.unfixed}
+    assert sorted(left) == ["color-contrast", "link-name"]
+
+    verified = verify_fixes(tmp_path, planned)
+
+    assert verified.fixes == planned.fixes
+    assert verified.unfixed == (left["color-contrast"],)
+    link = left["link-name"]
+    assert verified.resolved == (
+        Resolved(rule_id=link.rule_id, page=link.page, target=link.target),
+    )
+
+
+@pytest.mark.browser
+@pytest.mark.parametrize(
+    ("replacements", "unfixed", "resolved"),
+    [
+        (
+            [("<html", '<html lang="en"')],
+            (),
+            (Resolved(rule_id="html-has-lang", page="index.html", target=("html",)),),
+        ),
+        (
+            [("<html", '<html lang="en"'), ("</main>", '<img src="new.png"></main>')],
+            (NO_LANGUAGE,),
+            (),
+        ),
+    ],
+    ids=["passed", "rejected"],
+)
+def test_only_changes_that_pass_their_checks_resolve_problems(
+    tmp_path: Path,
+    replacements: list[tuple[str, str]],
+    unfixed: tuple[Unfixed, ...],
+    resolved: tuple[Resolved, ...],
+) -> None:
+    (tmp_path / "index.html").write_bytes(PAGE.encode("utf-8"))
+    plan = plan_for(replacements).model_copy(update={"fixes": (), "unfixed": (NO_LANGUAGE,)})
+
+    verified = verify_fixes(tmp_path, plan)
+
+    assert (verified.unfixed, verified.resolved) == (unfixed, resolved)
 
 
 @pytest.mark.browser
