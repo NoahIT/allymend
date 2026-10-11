@@ -29,6 +29,7 @@ _FIX_TYPES = {
     Remediability.SUGGESTED: "a fix can be suggested, but a person should review it",
     Remediability.HUMAN: "needs a person to decide",
 }
+_WRITTEN = {"image-alt": "alt text", "link-name": "link name"}
 
 
 def render_text(result: ScanResult) -> str:
@@ -97,15 +98,17 @@ def render_evidence(result: ScanResult, plan: FixPlan) -> str:
 def render_payloads(requests: Sequence[tuple[Slot, Mapping[str, Any]]]) -> str:
     """Show what would be sent to a model for each slot, with images summarised."""
     if not requests:
-        return "Nothing would be sent: no image needs alt text that allymend can fix.\n"
-    first = requests[0][1]
+        return "Nothing would be sent: no element needs text that allymend can fix.\n"
     lines = [
-        f"Would send {_count(len(requests), 'request')} to {first['model']}. "
-        "Nothing has been sent.",
-        "",
-        "Instructions sent with every request:",
-        *(f"  {line}" if line else "" for line in str(first["system"]).splitlines()),
+        f"Would send {_count(len(requests), 'request')} to {requests[0][1]['model']}. "
+        "Nothing has been sent."
     ]
+    instructions: dict[str, str] = {}
+    for slot, request in requests:
+        instructions.setdefault(slot.kind, str(request["system"]))
+    for kind, system in instructions.items():
+        lines += ["", f"Instructions sent with every {kind} request:"]
+        lines += [f"  {line}" if line else "" for line in system.splitlines()]
     for number, (slot, request) in enumerate(requests, start=1):
         lines += ["", f"{number}. {slot.page}: {' >>> '.join(slot.target)}"]
         for block in request["messages"][0]["content"]:
@@ -138,7 +141,8 @@ def render_fix_summary(
     if written:
         lines += ["", "Text written by a model; read each one before applying the patch:"]
         lines += [
-            f'  {fix.page}: "{fix.value.text}" ({fix.value.source})'
+            f'  {fix.page}: {_WRITTEN.get(fix.rule_id, fix.rule_id)} "{fix.value.text}" '
+            f"({fix.value.source})"
             for fix in written
             if fix.value is not None
         ]

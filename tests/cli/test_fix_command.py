@@ -30,23 +30,27 @@ def site(tmp_path: Path, write_page: Callable[..., Path], monkeypatch: pytest.Mo
 
 @pytest.fixture
 def claude_requests(monkeypatch: pytest.MonkeyPatch) -> Iterator[list[Any]]:
-    """Point the Anthropic SDK at a local server that answers every request with one alt text."""
+    """Point the Anthropic SDK at a local server that answers with one alt text or link name."""
     received: list[Any] = []
-    answer = {"alt": "A blue mug", "decorative": False, "rationale": "The page sells it."}
-    reply = {
-        "id": "msg_1",
-        "type": "message",
-        "role": "assistant",
-        "model": "claude-opus-5-5",
-        "content": [{"type": "text", "text": json.dumps(answer)}],
-        "stop_reason": "end_turn",
-        "stop_sequence": None,
-        "usage": {"input_tokens": 10, "output_tokens": 5},
-    }
+    alt = {"alt": "A blue mug", "decorative": False, "rationale": "The page sells it."}
+    name = {"name": "Your cart", "unclear": False, "rationale": "The icon is a cart."}
 
     class Handler(BaseHTTPRequestHandler):
         def do_POST(self) -> None:
-            received.append(json.loads(self.rfile.read(int(self.headers["content-length"]))))
+            request = json.loads(self.rfile.read(int(self.headers["content-length"])))
+            received.append(request)
+            schema = request["output_config"]["format"]["schema"]
+            answer = name if "name" in schema["properties"] else alt
+            reply = {
+                "id": "msg_1",
+                "type": "message",
+                "role": "assistant",
+                "model": "claude-opus-5-5",
+                "content": [{"type": "text", "text": json.dumps(answer)}],
+                "stop_reason": "end_turn",
+                "stop_sequence": None,
+                "usage": {"input_tokens": 10, "output_tokens": 5},
+            }
             data = json.dumps(reply).encode()
             self.send_response(200)
             self.send_header("content-type", "application/json")
@@ -82,7 +86,7 @@ def test_alt_text_from_claude_is_checked_and_listed_for_review(
         "The checks behind every fix are in e.json.",
         "",
         "Text written by a model; read each one before applying the patch:",
-        '  shop/mug.html: "A blue mug" (claude-opus-5-5)',
+        '  shop/mug.html: alt text "A blue mug" (claude-opus-5-5)',
     ]
     assert 'alt="A blue mug"' in Path("allymend.patch").read_text(encoding="utf-8")
     [request] = claude_requests
@@ -92,6 +96,41 @@ def test_alt_text_from_claude_is_checked_and_listed_for_review(
     assert values == [
         {"text": "A blue mug", "rationale": "The page sells it.", "source": "claude-opus-5-5"}
     ]
+
+
+def test_links_are_named_by_claude_or_by_their_image(
+    tmp_path: Path,
+    write_page: Callable[..., Path],
+    monkeypatch: pytest.MonkeyPatch,
+    claude_requests: list[Any],
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    write_page(
+        "links/index.html",
+        '<a href="cart.html"><svg width="24" height="24"></svg></a> '
+        '<a href="shop.html"><img src="mug.png"></a>',
+    )
+    monkeypatch.chdir(tmp_path)
+
+    assert main(["fix", "links", "--text-from", "claude"]) == EXIT_PROBLEMS
+
+    lines = capsys.readouterr().out.splitlines()
+    assert lines[0].startswith("Wrote fixes for 2 problems in 1 file to allymend.patch.")
+    assert '  index.html: alt text "A blue mug" (claude-opus-5-5)' in lines
+    assert '  index.html: link name "Your cart" (claude-opus-5-5)' in lines
+    gone = lines.index("Also gone once these fixes were applied (1 problem):")
+    assert lines[gone + 1] == "  index.html: Link has no name (link-name), 1 element"
+    patch = Path("allymend.patch").read_text(encoding="utf-8")
+    assert '<a aria-label="Your cart" href="cart.html">' in patch
+    assert '<img alt="A blue mug" src="mug.png">' in patch
+    systems = sorted(request["system"].split("\n")[0] for request in claude_requests)
+    assert systems == [
+        "You name links on web pages, for people who use screen readers or control their "
+        "computer by voice.",
+        "You write alternative text for images on web pages, for people who use screen readers.",
+    ]
+    [link] = [r for r in claude_requests if r["system"].startswith("You name links")]
+    assert [block["type"] for block in link["messages"][0]["content"]] == ["image", "text"]
 
 
 @pytest.mark.usefixtures("site")

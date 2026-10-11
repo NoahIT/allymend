@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from types import MappingProxyType
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 from justhtml import JustHTML
 
@@ -12,14 +12,20 @@ from allymend.files import read_source
 from allymend.fixers.alt_text import check_alt_text, fix_image_alt
 from allymend.fixers.edits import apply_edits, unified_diff
 from allymend.fixers.html_has_lang import check_language_tag, fix_html_has_lang
+from allymend.fixers.link_name import check_link_name, check_link_tag, fix_link_name
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping
     from pathlib import Path
 
+    from justhtml import QueryMatch
+
     from allymend.core.models import Edit, Occurrence, ScanResult, SourceLocation, Value
     from allymend.files import SourceText
     from allymend.fixers.values import ValueSource
+
+_ALT_TEXT_LENGTH = 150
+_LINK_NAME_LENGTH = 100
 
 
 @dataclass(frozen=True, slots=True)
@@ -29,8 +35,8 @@ class FixOptions:
     Attributes:
         language: The pages' language as a tag such as ``en`` or ``en-GB``. Fixing a missing
             page language needs it.
-        values: Where text that fixes need comes from, such as alt text. Without it, those
-            fixes are left for a person.
+        values: Where text that fixes need comes from, such as alt text or link names. Without
+            it, those fixes are left for a person.
 
     Raises:
         ValueError: ``language`` is not a language tag.
@@ -59,7 +65,8 @@ def plan_fixes(
     same file. Nothing is written. The diffs' paths are relative to ``root``, with
     ``path_prefix`` in front so that the patch can be applied from another folder.
 
-    Fixes that need text someone has to write, such as alt text, ask ``options.values`` for it.
+    Fixes that need text someone has to write, such as alt text or a link's name, ask
+    ``options.values`` for it.
     ``captures`` holds how elements looked in the browser, keyed by page and target, to help
     whoever writes the text.
     """
@@ -88,6 +95,7 @@ class _Request:
     page: str
     occurrence: Occurrence
     location: SourceLocation
+    element: QueryMatch | None
     language: str | None
     options: FixOptions
     capture: Capture | None
@@ -102,9 +110,33 @@ def _page_language(request: _Request) -> tuple[Edit, Value | None]:
 def _image_alt(request: _Request) -> tuple[Edit, Value | None]:
     if request.options.values is None:
         raise CannotFixError("needs alt text from a person, or from a model (--text-from claude)")
+    slot = _slot(request, "alt-text", _ALT_TEXT_LENGTH)
+    value = request.options.values.fill(slot)
+    alt = check_alt_text(value.text, slot.max_length)
+    edit = fix_image_alt(request.text, request.location, alt)
+    return edit, value.model_copy(update={"text": alt})
+
+
+def _link_name(request: _Request) -> tuple[Edit, Value | None]:
+    images = request.element.query("img") if request.element is not None else []
+    if any("alt" not in (image.attrs or {}) for image in images):
+        raise CannotFixError("the image inside it will name the link once the image has alt text")
+    check_link_tag(request.text, request.location)
+    if request.options.values is None:
+        raise CannotFixError(
+            "needs a link name from a person, or from a model (--text-from claude)"
+        )
+    slot = _slot(request, "link-name", _LINK_NAME_LENGTH)
+    value = request.options.values.fill(slot)
+    name = check_link_name(value.text, slot.max_length)
+    edit = fix_link_name(request.text, request.location, name)
+    return edit, value.model_copy(update={"text": name})
+
+
+def _slot(request: _Request, kind: Literal["alt-text", "link-name"], max_length: int) -> Slot:
     capture = request.capture or Capture()
-    slot = Slot(
-        kind="alt-text",
+    return Slot(
+        kind=kind,
         rule_id=request.occurrence.rule_id,
         page=request.page,
         target=request.occurrence.target,
@@ -113,16 +145,19 @@ def _image_alt(request: _Request) -> tuple[Edit, Value | None]:
         context=capture.context,
         image=capture.image,
         media_type=capture.media_type,
+        max_length=max_length,
     )
-    value = request.options.values.fill(slot)
-    alt = check_alt_text(value.text, slot.max_length)
-    edit = fix_image_alt(request.text, request.location, alt)
-    return edit, value.model_copy(update={"text": alt})
 
 
 _FIXERS: Mapping[str, Callable[[_Request], tuple[Edit, Value | None]]] = MappingProxyType(
-    {"html-has-lang": _page_language, "image-alt": _image_alt}
+    {"html-has-lang": _page_language, "image-alt": _image_alt, "link-name": _link_name}
 )
+
+
+@dataclass(frozen=True, slots=True)
+class _Document:
+    language: str | None
+    elements: Mapping[tuple[int, int], QueryMatch]
 
 
 class _Planner:
@@ -136,7 +171,7 @@ class _Planner:
         self._options = options
         self._captures = captures
         self._sources: dict[str, SourceText | None] = {}
-        self._languages: dict[str, str | None] = {}
+        self._documents: dict[str, _Document] = {}
         self._edits: dict[str, list[Edit]] = {}
 
     def fix(self, page: str, occurrence: Occurrence) -> Fix:
@@ -147,13 +182,15 @@ class _Planner:
         if location is None:
             raise CannotFixError("the element couldn't be traced to its source")
         text = self._text(location.file)
+        document = self._document(location.file, text)
         edit, value = fixer(
             _Request(
                 text=text,
                 page=page,
                 occurrence=occurrence,
                 location=location,
-                language=self._language(location.file, text),
+                element=document.elements.get((location.line, location.column)),
+                language=document.language,
                 options=self._options,
                 capture=self._captures.get((page, occurrence.target)),
             )
@@ -194,16 +231,21 @@ class _Planner:
             )
         return source.text
 
-    def _language(self, file: str, text: str) -> str | None:
-        if file not in self._languages:
-            self._languages[file] = _document_language(text)
-        return self._languages[file]
+    def _document(self, file: str, text: str) -> _Document:
+        if file not in self._documents:
+            self._documents[file] = _parse(text)
+        return self._documents[file]
 
 
-def _document_language(text: str) -> str | None:
-    elements = JustHTML(text, sanitize=False).root.query("html")
-    language = next((((e.attrs or {}).get("lang") or "").strip() for e in elements), "")
+def _parse(text: str) -> _Document:
+    root = JustHTML(text, sanitize=False, track_node_locations=True).root
+    elements = {
+        (element.origin_line, element.origin_col): element
+        for element in root.query("*")
+        if element.origin_line is not None and element.origin_col is not None
+    }
+    language = next((((e.attrs or {}).get("lang") or "").strip() for e in root.query("html")), "")
     try:
-        return check_language_tag(language)
+        return _Document(language=check_language_tag(language), elements=elements)
     except ValueError:
-        return None
+        return _Document(language=None, elements=elements)

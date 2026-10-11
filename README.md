@@ -6,7 +6,7 @@ The name joins "ally", the way a11y (accessibility) is often said, with "mend".
 
 ## Status
 
-Early development, for static HTML sites. Scanning works, and so do the first fixes: a missing page language, and missing alt text written by Claude when you ask for it.
+Early development, for static HTML sites. Scanning works, and so do the first fixes: a missing page language, and alt text and link names written by Claude when you ask for them.
 
 ## How it works
 
@@ -23,7 +23,7 @@ Early development, for static HTML sites. Scanning works, and so do the first fi
 
 - Tell you that your site is accessible or compliant with any law. Automated checks find only part of real accessibility problems. The rest needs people, including people who use assistive technology.
 - Patch pages in the browser at runtime. Allymend is not an overlay; it changes source code.
-- Write content on its own. Alt text, link names and similar text need judgment. Allymend drafts alt text only when you ask Claude to, and lists every draft for you to read; everything else is marked as needing a person.
+- Write content on its own. Alt text, link names and similar text need judgment. Allymend drafts alt text and link names only when you ask Claude to, and lists every draft for you to read; everything else is marked as needing a person.
 
 ## Trying it
 
@@ -54,7 +54,7 @@ This scans the folder, checks each fix as described in step 4 above, and writes 
 
 ### Text written by Claude
 
-Some fixes need words that a program can't know, such as alt text that describes an image. Allymend can ask Claude to write them. This is off unless you ask for it, and needs the `claude` extra and an Anthropic API key:
+Some fixes need words that a program can't know, such as alt text that describes an image, or a name for a link that shows only an icon. Allymend can ask Claude to write them. This is off unless you ask for it, and needs the `claude` extra and an Anthropic API key:
 
 ```
 poetry install --all-extras
@@ -63,9 +63,9 @@ poetry run allymend fix path/to/site --text-from claude --show-payload
 poetry run allymend fix path/to/site --text-from claude
 ```
 
-For each image, Claude receives the image as the browser shows it and the text around it: the page title, the nearest heading, a caption, the link the image is in and nearby text, each cut to 200 characters. Nothing else from your project is sent. `--show-payload` prints exactly that for every image and stops without sending anything.
+For each image or link, Claude receives a picture of it as the browser shows it and the text around it: the page title, the nearest heading, a caption, the link it is or is in and nearby text, each cut to 200 characters. Nothing else from your project is sent. `--show-payload` prints exactly that for every request and stops without sending anything.
 
-The text Claude writes is checked like any other fix and listed in the summary. Read it before applying the patch. When an image is all a link contains, its alt text also names the link, so Claude is asked to say where the link goes, and the summary lists the link's problem as gone too. When Claude thinks an image is decorative, allymend leaves it for you to decide, because `alt=""` hides an image from screen readers. The model is `claude-opus-5-5` unless you choose another with `--model`.
+The text Claude writes is checked like any other fix and listed in the summary. Read it before applying the patch. A link without a name gets an `aria-label`. When an image is all a link contains, the image's alt text names the link instead, so Claude is asked to say where the link goes, and the summary lists the link's problem as gone too. When Claude can't tell where a link goes, the link is left for you. When it thinks an image is decorative, allymend leaves that for you to decide too, because `alt=""` hides an image from screen readers. The model is `claude-opus-5-5` unless you choose another with `--model`.
 
 ## Development
 

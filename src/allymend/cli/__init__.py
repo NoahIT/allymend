@@ -86,7 +86,11 @@ def _run_fix(args: argparse.Namespace, options: ScanOptions) -> int:
     prefix = _patch_prefix(root)
     writer = _text_writer(args)
     result = map_sources(root, scan_directory(root, options))
-    captures = {} if writer is None else capture_elements(root, result, {"image-alt"}, options)
+    captures = (
+        {}
+        if writer is None
+        else capture_elements(root, result, {"image-alt", "link-name"}, options)
+    )
     if writer is not None and args.show_payload:
         preview = _Preview()
         fix_options = FixOptions(language=args.lang, values=preview)

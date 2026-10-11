@@ -63,12 +63,16 @@ def test_lists_what_was_fixed_and_what_was_left() -> None:
 
 def test_lists_text_written_by_a_model() -> None:
     value = Value(text="A blue mug", rationale="It shows a mug.", source="claude-opus-5-5")
-    written = fix("shop.html").model_copy(update={"rule_id": "image-alt", "value": value})
-    plan = FixPlan(fixes=(fix("index.html"), written), unfixed=(), changes=())
+    alt = fix("shop.html").model_copy(update={"rule_id": "image-alt", "value": value})
+    link = alt.model_copy(
+        update={"rule_id": "link-name", "value": value.model_copy(update={"text": "Cart"})}
+    )
+    plan = FixPlan(fixes=(fix("index.html"), alt, link), unfixed=(), changes=())
     assert render_fix_summary(result(), plan, PATCH).splitlines()[2:] == [
         "",
         "Text written by a model; read each one before applying the patch:",
-        '  shop.html: "A blue mug" (claude-opus-5-5)',
+        '  shop.html: alt text "A blue mug" (claude-opus-5-5)',
+        '  shop.html: link name "Cart" (claude-opus-5-5)',
     ]
 
 
@@ -111,23 +115,42 @@ def test_payloads_show_images_by_size_and_text_in_full() -> None:
             }
         ],
     }
-    target = Slot(kind="alt-text", rule_id="image-alt", page="a.html", target=("img",), html="")
-    assert render_payloads([(target, request)]).splitlines() == [
-        "Would send 1 request to claude-opus-5-5. Nothing has been sent.",
+    image = Slot(kind="alt-text", rule_id="image-alt", page="a.html", target=("img",), html="")
+    link = Slot(kind="link-name", rule_id="link-name", page="a.html", target=("a",), html="")
+    link_request = {
+        "model": "claude-opus-5-5",
+        "system": "Name links.",
+        "messages": [{"role": "user", "content": [{"type": "text", "text": "Name it."}]}],
+    }
+    payloads = [(image, request), (link, link_request), (image, request)]
+    assert render_payloads(payloads).splitlines() == [
+        "Would send 3 requests to claude-opus-5-5. Nothing has been sent.",
         "",
-        "Instructions sent with every request:",
+        "Instructions sent with every alt-text request:",
         "  Write alt text.",
         "",
         "  Be brief.",
+        "",
+        "Instructions sent with every link-name request:",
+        "  Name links.",
         "",
         "1. a.html: img",
         "   image: image/jpeg, 3 bytes",
         "   Alt text, please.",
         "",
         "   <page_details>",
+        "",
+        "2. a.html: a",
+        "   Name it.",
+        "",
+        "3. a.html: img",
+        "   image: image/jpeg, 3 bytes",
+        "   Alt text, please.",
+        "",
+        "   <page_details>",
     ]
     assert render_payloads([]) == (
-        "Nothing would be sent: no image needs alt text that allymend can fix.\n"
+        "Nothing would be sent: no element needs text that allymend can fix.\n"
     )
 
 

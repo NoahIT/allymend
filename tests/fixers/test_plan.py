@@ -24,7 +24,8 @@ FIXED = PAGE.replace("<html>", '<html lang="en">')
 def location(file: str = "index.html", text: str = PAGE, tag: str = "<html") -> SourceLocation:
     offset = text.index(tag)
     line = text.count("\n", 0, offset) + 1
-    return SourceLocation(file=file, line=line, column=1, offset=offset)
+    column = offset - text.rfind("\n", 0, offset)
+    return SourceLocation(file=file, line=line, column=column, offset=offset)
 
 
 def problem(
@@ -95,10 +96,10 @@ def test_leaves_a_missing_language_alone_when_none_was_given(tmp_path: Path) -> 
 
 def test_leaves_rules_without_a_fixer_for_a_person(tmp_path: Path) -> None:
     write(tmp_path, "index.html")
-    link = problem("link-name", location(tag="<img"), target="a")
-    plan = plan_fixes(tmp_path, scan(link), FixOptions(language="en"))
+    faint = problem("color-contrast", location(tag="<img"), target="p")
+    plan = plan_fixes(tmp_path, scan(faint), FixOptions(language="en"))
     assert plan.unfixed == (
-        unfixed("there's no automatic fix for this rule yet", "link-name", "a"),
+        unfixed("there's no automatic fix for this rule yet", "color-contrast", "p"),
     )
 
 
@@ -192,6 +193,85 @@ def test_alt_text_that_cannot_be_used_is_left_with_the_reason(
     [left] = plan.unfixed
     assert left.reason.startswith(reason)
     assert plan.changes == ()
+
+
+LINKS = (
+    '<!doctype html>\n<html lang="en">\n<head><title>Shop</title></head>\n<body>\n'
+    '<a href="cart.html"><i class="icon-cart"></i></a>\n'
+    '<a href="mugs.html"><img src="mug.png" alt=""></a>\n'
+    '<a href="shop.html"><img src="shop.png"></a>\n'
+    '<a href="/" title="">Home</a>\n'
+)
+
+
+def link_problem(href: str) -> Occurrence:
+    tag = f'<a href="{href}"'
+    return problem("link-name", location(text=LINKS, tag=tag), target=f'a[href="{href}"]')
+
+
+def test_link_names_need_someone_to_write_them(tmp_path: Path) -> None:
+    write(tmp_path, "index.html", LINKS)
+    plan = plan_fixes(tmp_path, scan(link_problem("cart.html")))
+    [left] = plan.unfixed
+    assert left.reason == "needs a link name from a person, or from a model (--text-from claude)"
+
+
+@pytest.mark.parametrize("href", ["cart.html", "mugs.html"], ids=["icon", "decorative-image"])
+def test_link_names_come_from_the_value_source(tmp_path: Path, href: str) -> None:
+    write(tmp_path, "index.html", LINKS)
+    writer = Writer("Your cart")
+    target = f'a[href="{href}"]'
+    capture = Capture(image=b"png bytes", context={"link": href})
+
+    plan = plan_fixes(
+        tmp_path,
+        scan(link_problem(href)),
+        FixOptions(values=writer),
+        captures={("index.html", (target,)): capture},
+    )
+
+    [fix] = plan.fixes
+    assert fix.value == Value(text="Your cart", rationale="It shows a mug.", source="writer")
+    position = LINKS.index(f'<a href="{href}"') + len("<a")
+    assert fix.edits == (
+        Edit(file="index.html", start=position, end=position, text=' aria-label="Your cart"'),
+    )
+    [slot] = writer.slots
+    assert (slot.kind, slot.rule_id, slot.target, slot.language) == (
+        "link-name",
+        "link-name",
+        (target,),
+        "en",
+    )
+    assert (slot.max_length, slot.context, slot.image) == (100, {"link": href}, b"png bytes")
+
+
+@pytest.mark.parametrize(
+    ("href", "reason"),
+    [
+        ("shop.html", "the image inside it will name the link once the image has alt text"),
+        ("/", "the <a> tag in index.html already has title; a person should check it"),
+    ],
+    ids=["image-without-alt", "title"],
+)
+def test_links_that_cannot_take_a_name_are_not_sent_for_one(
+    tmp_path: Path, href: str, reason: str
+) -> None:
+    write(tmp_path, "index.html", LINKS)
+    writer = Writer("Shop")
+    plan = plan_fixes(tmp_path, scan(link_problem(href)), FixOptions(values=writer))
+    [left] = plan.unfixed
+    assert left.reason == reason
+    assert writer.slots == []
+
+
+def test_link_names_that_cannot_be_used_are_left_with_the_reason(tmp_path: Path) -> None:
+    write(tmp_path, "index.html", LINKS)
+    plan = plan_fixes(
+        tmp_path, scan(link_problem("cart.html")), FixOptions(values=Writer("Click here"))
+    )
+    [left] = plan.unfixed
+    assert left.reason == "the suggested link name doesn't say where the link goes"
 
 
 def test_leaves_problems_without_a_source_location(tmp_path: Path) -> None:

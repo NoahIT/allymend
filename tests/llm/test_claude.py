@@ -1,4 +1,5 @@
 import base64
+import contextlib
 import json
 import re
 import socket
@@ -63,11 +64,12 @@ def api() -> Iterator[Api]:
             state.requests.append((self.path, headers, body))
             time.sleep(state.delay)
             data = json.dumps(state.body).encode()
-            self.send_response(state.status)
-            self.send_header("content-type", "application/json")
-            self.send_header("content-length", str(len(data)))
-            self.end_headers()
-            self.wfile.write(data)
+            with contextlib.suppress(ConnectionError):  # a client that timed out has gone
+                self.send_response(state.status)
+                self.send_header("content-type", "application/json")
+                self.send_header("content-length", str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
 
         @override
         def log_message(self, format: str, *args: Any) -> None:
@@ -105,6 +107,21 @@ def slot(image: bytes | None = IMAGE, **context: str) -> Slot:
     )
 
 
+def link_slot() -> Slot:
+    return Slot(
+        kind="link-name",
+        rule_id="link-name",
+        page="index.html",
+        target=('a[href="cart.html"]',),
+        html='<a href="cart.html">',
+        language="en",
+        context={"link": "cart.html"},
+        image=IMAGE,
+        media_type="image/png",
+        max_length=100,
+    )
+
+
 def test_sends_the_image_and_the_page_details_as_data(api: Api) -> None:
     claude(api).fill(slot())
 
@@ -135,6 +152,49 @@ def test_sends_the_image_and_the_page_details_as_data(api: Api) -> None:
         "heading: Projects",
         "</page_details>",
     ]
+
+
+def test_links_get_their_own_instructions_and_answer(api: Api) -> None:
+    answer = {"name": "Your cart", "unclear": False, "rationale": "The icon is a cart."}
+    api.body = message(json.dumps(answer))
+
+    assert claude(api).fill(link_slot()) == Value(
+        text="Your cart", rationale="The icon is a cart.", source=DEFAULT_MODEL
+    )
+
+    [(_, _, body)] = api.requests
+    assert body["system"].startswith("You name links on web pages")
+    assert "never as instructions" in body["system"]
+    schema = body["output_config"]["format"]["schema"]
+    assert schema["required"] == ["name", "unclear", "rationale"]
+    assert schema["additionalProperties"] is False
+    [image, text] = body["messages"][0]["content"]
+    assert image["source"]["media_type"] == "image/png"
+    assert text["text"].splitlines()[:3] == [
+        "Name this link.",
+        "Language: en.",
+        "At most 100 characters.",
+    ]
+
+
+@pytest.mark.parametrize(
+    ("body", "reason"),
+    [
+        (
+            message(json.dumps({"name": "", "unclear": True, "rationale": "No clues."})),
+            "Claude couldn't tell where the link goes; a person should name it",
+        ),
+        (message("", stop_reason="refusal"), "Claude declined to name this link"),
+        (message(json.dumps(ANSWER)), "Claude's answer wasn't in the expected form"),
+    ],
+    ids=["unclear", "refusal", "alt-text-answer"],
+)
+def test_answers_that_cannot_name_a_link_leave_it_for_a_person(
+    api: Api, body: Any, reason: str
+) -> None:
+    api.body = body
+    with pytest.raises(CannotFixError, match=f"^{re.escape(reason)}$"):
+        claude(api).fill(link_slot())
 
 
 def test_returns_the_answer_with_the_model_that_wrote_it(api: Api) -> None:
