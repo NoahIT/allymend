@@ -197,33 +197,53 @@ def test_answers_that_cannot_name_a_link_leave_it_for_a_person(
         claude(api).fill(link_slot())
 
 
-def test_buttons_get_their_own_instructions(api: Api) -> None:
+@pytest.mark.parametrize(
+    ("kind", "system", "ask"),
+    [
+        ("button-name", "You name buttons on web pages", "Name this button.\n"),
+        ("field-name", "You name form fields on web pages", "Name this form field.\n"),
+    ],
+    ids=["button", "field"],
+)
+def test_buttons_and_fields_get_their_own_instructions(
+    api: Api, kind: TextKind, system: str, ask: str
+) -> None:
     answer = {"name": "Search", "unclear": False, "rationale": "A magnifying glass."}
     api.body = message(json.dumps(answer))
-    assert claude(api).fill(link_slot("button-name")).text == "Search"
+    assert claude(api).fill(link_slot(kind)).text == "Search"
     [(_, _, body)] = api.requests
-    assert body["system"].startswith("You name buttons on web pages")
+    assert body["system"].startswith(system)
     assert body["output_config"]["format"]["schema"]["required"] == ["name", "unclear", "rationale"]
-    assert body["messages"][0]["content"][1]["text"].startswith("Name this button.\n")
+    assert body["messages"][0]["content"][1]["text"].startswith(ask)
+
+
+UNCLEAR = message(json.dumps({"name": "", "unclear": True, "rationale": "No clues."}))
 
 
 @pytest.mark.parametrize(
-    ("body", "reason"),
+    ("kind", "body", "reason"),
     [
         (
-            message(json.dumps({"name": "", "unclear": True, "rationale": "No clues."})),
+            "button-name",
+            UNCLEAR,
             "Claude couldn't tell what the button does; a person should name it",
         ),
-        (message("", stop_reason="refusal"), "Claude declined to name this button"),
+        ("button-name", message("", stop_reason="refusal"), "Claude declined to name this button"),
+        (
+            "field-name",
+            UNCLEAR,
+            "Claude couldn't tell what the field is for; a person should name it",
+        ),
+        ("field-name", message("", stop_reason="refusal"), "Claude declined to name this field"),
     ],
-    ids=["unclear", "refusal"],
+    ids=["button-unclear", "button-refusal", "field-unclear", "field-refusal"],
 )
-def test_answers_that_cannot_name_a_button_leave_it_for_a_person(
-    api: Api, body: Any, reason: str
+def test_answers_that_cannot_name_a_control_leave_it_for_a_person(
+    api: Api, kind: TextKind, body: Any, reason: str
 ) -> None:
     api.body = body
     with pytest.raises(CannotFixError, match=f"^{re.escape(reason)}$"):
-        claude(api).fill(link_slot("button-name"))
+        claude(api).fill(link_slot(kind))
 
 
 def test_returns_the_answer_with_the_model_that_wrote_it(api: Api) -> None:

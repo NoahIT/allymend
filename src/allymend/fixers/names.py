@@ -16,14 +16,14 @@ if TYPE_CHECKING:
 
     from allymend.core.models import SourceLocation
 
-type Role = Literal["link", "button"]
+type Role = Literal["link", "button", "field"]
 
 _NAMING_ATTRIBUTES = ("aria-label", "aria-labelledby", "title")
 
 
 @dataclass(frozen=True, slots=True)
 class _Rules:
-    redundant: re.Pattern[str]
+    redundant: re.Pattern[str] | None
     vague: frozenset[str]
     purpose: str
 
@@ -51,6 +51,13 @@ _ROLES: Mapping[str, _Rules] = MappingProxyType(
             vague=frozenset({"click", "click here", "go", "here", "press", "tap"}),
             purpose="what the button does",
         ),
+        "field": _Rules(
+            redundant=None,
+            vague=frozenset(
+                {"choose", "enter", "enter text", "field", "input", "select", "text", "type here"}
+            ),
+            purpose="what the field is for",
+        ),
     }
 )
 
@@ -60,12 +67,12 @@ def check_name(text: str, max_length: int, role: Role) -> str:
 
     Raises:
         CannotFixError: The text is empty, longer than ``max_length``, contains control
-            characters, starts with the role, such as "link", which screen readers already
+            characters, starts with the role of a link or button, which screen readers already
             say, or is too vague to tell people what the element is for, like "click here".
     """
     rules = _ROLES[role]
     cleaned = check_text(text, max_length, f"{role} name")
-    if rules.redundant.match(cleaned):
+    if rules.redundant is not None and rules.redundant.match(cleaned):
         raise CannotFixError(
             f'the suggested {role} name starts with "{role}", which screen readers already say'
         )

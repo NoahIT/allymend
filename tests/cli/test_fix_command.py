@@ -30,17 +30,24 @@ def site(tmp_path: Path, write_page: Callable[..., Path], monkeypatch: pytest.Mo
 
 @pytest.fixture
 def claude_requests(monkeypatch: pytest.MonkeyPatch) -> Iterator[list[Any]]:
-    """Point the Anthropic SDK at a local server that answers with one alt text or link name."""
+    """Point the Anthropic SDK at a local server that gives one answer for each kind of text."""
     received: list[Any] = []
-    alt = {"alt": "A blue mug", "decorative": False, "rationale": "The page sells it."}
-    name = {"name": "Your cart", "unclear": False, "rationale": "The icon is a cart."}
+    answers = {
+        "You write alternative text": {
+            "alt": "A blue mug",
+            "decorative": False,
+            "rationale": "The page sells it.",
+        },
+        "You name links": {"name": "Your cart", "unclear": False, "rationale": "A cart icon."},
+        "You name buttons": {"name": "Search", "unclear": False, "rationale": "A lens icon."},
+        "You name form fields": {"name": "Email", "unclear": False, "rationale": "Its type."},
+    }
 
     class Handler(BaseHTTPRequestHandler):
         def do_POST(self) -> None:
             request = json.loads(self.rfile.read(int(self.headers["content-length"])))
             received.append(request)
-            schema = request["output_config"]["format"]["schema"]
-            answer = name if "name" in schema["properties"] else alt
+            answer = next(a for start, a in answers.items() if request["system"].startswith(start))
             reply = {
                 "id": "msg_1",
                 "type": "message",
@@ -98,7 +105,7 @@ def test_alt_text_from_claude_is_checked_and_listed_for_review(
     ]
 
 
-def test_links_and_buttons_are_named_by_claude_or_by_their_image(
+def test_controls_are_named_by_claude_or_by_their_image(
     tmp_path: Path,
     write_page: Callable[..., Path],
     monkeypatch: pytest.MonkeyPatch,
@@ -106,34 +113,33 @@ def test_links_and_buttons_are_named_by_claude_or_by_their_image(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     write_page(
-        "links/index.html",
+        "controls/index.html",
         '<a href="cart.html"><svg width="24" height="24"></svg></a> '
         '<a href="shop.html"><img src="mug.png"></a> '
-        '<button type="button"><svg width="24" height="24"></svg></button>',
+        '<button type="button"><svg width="24" height="24"></svg></button> '
+        '<input type="email" name="email">',
     )
     monkeypatch.chdir(tmp_path)
 
-    assert main(["fix", "links", "--text-from", "claude"]) == EXIT_PROBLEMS
+    assert main(["fix", "controls", "--text-from", "claude"]) == EXIT_PROBLEMS
 
     lines = capsys.readouterr().out.splitlines()
-    assert lines[0].startswith("Wrote fixes for 3 problems in 1 file to allymend.patch.")
-    assert '  index.html: alt text "A blue mug" (claude-opus-5-5)' in lines
-    assert '  index.html: link name "Your cart" (claude-opus-5-5)' in lines
-    assert '  index.html: button name "Your cart" (claude-opus-5-5)' in lines
+    assert lines[0].startswith("Wrote fixes for 4 problems in 1 file to allymend.patch.")
+    written = lines.index("Text written by a model; read each one before applying the patch:")
+    assert sorted(lines[written + 1 : written + 5]) == [
+        '  index.html: alt text "A blue mug" (claude-opus-5-5)',
+        '  index.html: button name "Search" (claude-opus-5-5)',
+        '  index.html: field name "Email" (claude-opus-5-5)',
+        '  index.html: link name "Your cart" (claude-opus-5-5)',
+    ]
     gone = lines.index("Also gone once these fixes were applied (1 problem):")
     assert lines[gone + 1] == "  index.html: Link has no name (link-name), 1 element"
     patch = Path("allymend.patch").read_text(encoding="utf-8")
     assert '<a aria-label="Your cart" href="cart.html">' in patch
     assert '<img alt="A blue mug" src="mug.png">' in patch
-    assert '<button aria-label="Your cart" type="button">' in patch
-    systems = sorted(request["system"].split("\n")[0] for request in claude_requests)
-    assert systems == [
-        "You name buttons on web pages, for people who use screen readers or control their "
-        "computer by voice.",
-        "You name links on web pages, for people who use screen readers or control their "
-        "computer by voice.",
-        "You write alternative text for images on web pages, for people who use screen readers.",
-    ]
+    assert '<button aria-label="Search" type="button">' in patch
+    assert '<input aria-label="Email" type="email" name="email">' in patch
+    assert len(claude_requests) == 4
     [link] = [r for r in claude_requests if r["system"].startswith("You name links")]
     assert [block["type"] for block in link["messages"][0]["content"]] == ["image", "text"]
 

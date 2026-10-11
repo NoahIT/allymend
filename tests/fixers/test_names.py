@@ -45,6 +45,13 @@ def fix(text: str, tag: str = "a", name: str = "Shop") -> str:
             '<button aria-label="Shop" class="icon"></button>',
         ),
         ("<BUTTON/>", "button", '<BUTTON aria-label="Shop"/>'),
+        ('<input type="email">', "input", '<input aria-label="Shop" type="email">'),
+        (
+            "<textarea rows=4></textarea>",
+            "textarea",
+            '<textarea aria-label="Shop" rows=4></textarea>',
+        ),
+        ("<select name=size></select>", "select", '<select aria-label="Shop" name=size></select>'),
     ],
     ids=[
         "link",
@@ -53,6 +60,9 @@ def fix(text: str, tag: str = "a", name: str = "Shop") -> str:
         "no-attributes",
         "button",
         "self-closing-button",
+        "input",
+        "textarea",
+        "select",
     ],
 )
 def test_adds_aria_label_after_the_tag_name(html: str, tag: str, expected: str) -> None:
@@ -113,6 +123,8 @@ def test_an_element_that_can_be_named_passes_the_tag_check() -> None:
         ("Read more about mugs", "link", None),
         ("Close menu", "button", None),
         ("Buttons and badges", "button", None),
+        ("Email address", "field", None),
+        ("Field notes", "field", None),
     ],
 )
 def test_names_are_tidied(text: str, role: Role, cleaned: str | None) -> None:
@@ -133,6 +145,9 @@ def test_names_are_tidied(text: str, role: Role, cleaned: str | None) -> None:
         ("MORE!", "link", "the suggested link name doesn't say where the link goes"),
         ("Click here", "button", "the suggested button name doesn't say what the button does"),
         ("Press", "button", "the suggested button name doesn't say what the button does"),
+        ("Input", "field", "the suggested field name doesn't say what the field is for"),
+        ("Type here...", "field", "the suggested field name doesn't say what the field is for"),
+        ("", "field", "the suggested field name is empty"),
     ],
     ids=[
         "empty",
@@ -146,6 +161,9 @@ def test_names_are_tidied(text: str, role: Role, cleaned: str | None) -> None:
         "more",
         "button-click-here",
         "press",
+        "input",
+        "type-here",
+        "empty-field",
     ],
 )
 def test_unusable_names_are_refused(text: str, role: Role, reason: str) -> None:
@@ -155,14 +173,24 @@ def test_unusable_names_are_refused(text: str, role: Role, reason: str) -> None:
 
 @pytest.mark.browser
 @pytest.mark.parametrize(
-    ("rule_id", "tag", "attributes"),
-    [("link-name", "a", 'href="shop.html"'), ("button-name", "button", 'type="button"')],
-    ids=["link", "button"],
+    ("rule_id", "tag", "element"),
+    [
+        ("link-name", "a", '<a href="shop.html"><svg width="24" height="24"></svg></a>'),
+        (
+            "button-name",
+            "button",
+            '<button type="button"><svg width="24" height="24"></svg></button>',
+        ),
+        ("label", "input", '<input type="text" name="q">'),
+        ("label", "textarea", '<textarea name="note"></textarea>'),
+        ("select-name", "select", '<select name="size"><option>S</option></select>'),
+    ],
+    ids=["link", "button", "input", "textarea", "select"],
 )
 def test_a_named_element_passes_the_checks(
-    tmp_path: Path, write_page: Callable[..., Path], rule_id: str, tag: str, attributes: str
+    tmp_path: Path, write_page: Callable[..., Path], rule_id: str, tag: str, element: str
 ) -> None:
-    write_page("index.html", f'<{tag} {attributes}><svg width="24" height="24"></svg></{tag}>')
+    write_page("index.html", element)
     result = map_sources(tmp_path, scan_directory(tmp_path))
     [unnamed] = [o for o in result.pages[0].occurrences if o.rule_id == rule_id]
     assert unnamed.source is not None
@@ -187,4 +215,4 @@ def test_a_named_element_passes_the_checks(
 
     [evidence] = verified.verifications
     assert evidence.passed
-    assert f'<{tag} aria-label="Shop" {attributes}>' in verified.patch
+    assert element.replace(f"<{tag} ", f'<{tag} aria-label="Shop" ', 1) in verified.patch

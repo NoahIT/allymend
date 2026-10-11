@@ -13,7 +13,7 @@ class Impact(StrEnum):
     CRITICAL = "critical"
 
 
-type TextKind = Literal["alt-text", "link-name", "button-name"]
+type TextKind = Literal["alt-text", "link-name", "button-name", "field-name"]
 
 
 class _Model(BaseModel):
@@ -126,8 +126,8 @@ class Slot(_Model):
     """Text a fix needs that a person or a model has to write.
 
     Attributes:
-        kind: What the text is for: ``alt-text`` for an image, ``link-name`` for a link, or
-            ``button-name`` for a button.
+        kind: What the text is for: ``alt-text`` for an image, ``link-name`` for a link,
+            ``button-name`` for a button, or ``field-name`` for a form field.
         rule_id: The axe-core rule the occurrence fails.
         page: The page it was found on.
         target: The occurrence's CSS selectors.

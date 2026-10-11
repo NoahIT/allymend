@@ -127,27 +127,31 @@ def _image_alt(request: _Request) -> tuple[Edit, Value | None]:
 
 @dataclass(frozen=True, slots=True)
 class _Control:
-    tag: str
+    tags: tuple[str, ...]
     role: Role
     kind: TextKind
 
 
 _CONTROLS: Mapping[str, _Control] = MappingProxyType(
     {
-        "link-name": _Control(tag="a", role="link", kind="link-name"),
-        "button-name": _Control(tag="button", role="button", kind="button-name"),
+        "link-name": _Control(tags=("a",), role="link", kind="link-name"),
+        "button-name": _Control(tags=("button",), role="button", kind="button-name"),
+        "label": _Control(tags=("input", "textarea"), role="field", kind="field-name"),
+        "select-name": _Control(tags=("select",), role="field", kind="field-name"),
     }
 )
 
 
 def _control_name(request: _Request) -> tuple[Edit, Value | None]:
     control = _CONTROLS[request.occurrence.rule_id]
-    images = request.element.query("img") if request.element is not None else []
+    element = request.element
+    tag = element.name if element is not None and element.name in control.tags else control.tags[0]
+    images = element.query("img") if element is not None else []
     if any("alt" not in (image.attrs or {}) for image in images):
         raise CannotFixError(
             f"the image inside it will name the {control.role} once the image has alt text"
         )
-    check_name_tag(request.text, request.location, control.tag)
+    check_name_tag(request.text, request.location, tag)
     if request.options.values is None:
         raise CannotFixError(
             f"needs a {control.role} name from a person, or from a model (--text-from claude)"
@@ -155,7 +159,7 @@ def _control_name(request: _Request) -> tuple[Edit, Value | None]:
     slot = _slot(request, control.kind, _NAME_LENGTH)
     value = request.options.values.fill(slot)
     name = check_name(value.text, slot.max_length, control.role)
-    edit = fix_name(request.text, request.location, control.tag, name)
+    edit = fix_name(request.text, request.location, tag, name)
     return edit, value.model_copy(update={"text": name})
 
 

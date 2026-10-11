@@ -29,7 +29,13 @@ _FIX_TYPES = {
     Remediability.SUGGESTED: "a fix can be suggested, but a person should review it",
     Remediability.HUMAN: "needs a person to decide",
 }
-_WRITTEN = {"image-alt": "alt text", "link-name": "link name", "button-name": "button name"}
+_WRITTEN = {
+    "image-alt": "alt text",
+    "link-name": "link name",
+    "button-name": "button name",
+    "label": "field name",
+    "select-name": "field name",
+}
 
 
 def render_text(result: ScanResult) -> str:

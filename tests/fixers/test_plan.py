@@ -195,7 +195,7 @@ def test_alt_text_that_cannot_be_used_is_left_with_the_reason(
     assert plan.changes == ()
 
 
-LINKS = (
+CONTROLS = (
     '<!doctype html>\n<html lang="en">\n<head><title>Shop</title></head>\n<body>\n'
     '<a href="cart.html"><i class="icon-cart"></i></a>\n'
     '<a href="mugs.html"><img src="mug.png" alt=""></a>\n'
@@ -203,31 +203,69 @@ LINKS = (
     '<a href="/" title="">Home</a>\n'
     '<button class="search"><svg></svg></button>\n'
     '<button class="close"><img src="close.png"></button>\n'
+    '<input type="email" name="email">\n'
+    '<textarea name="note"></textarea>\n'
+    '<select name="size"><option>S</option></select>\n'
 )
 
 
 def link_problem(href: str) -> Occurrence:
     tag = f'<a href="{href}"'
-    return problem("link-name", location(text=LINKS, tag=tag), target=f'a[href="{href}"]')
+    return problem("link-name", location(text=CONTROLS, tag=tag), target=f'a[href="{href}"]')
 
 
 def button_problem(name: str) -> Occurrence:
     tag = f'<button class="{name}"'
-    return problem("button-name", location(text=LINKS, tag=tag), target=f"button.{name}")
+    return problem("button-name", location(text=CONTROLS, tag=tag), target=f"button.{name}")
 
 
 def test_lists_the_rules_whose_fixes_need_written_text() -> None:
-    assert frozenset({"image-alt", "link-name", "button-name"}) == TEXT_RULES
+    expected = {"image-alt", "link-name", "button-name", "label", "select-name"}
+    assert frozenset(expected) == TEXT_RULES
+
+
+@pytest.mark.parametrize(
+    ("rule_id", "start", "tag"),
+    [
+        ("label", '<input type="email"', "<input"),
+        ("label", '<textarea name="note"', "<textarea"),
+        ("select-name", '<select name="size"', "<select"),
+    ],
+    ids=["input", "textarea", "select"],
+)
+def test_field_names_come_from_the_value_source(
+    tmp_path: Path, rule_id: str, start: str, tag: str
+) -> None:
+    write(tmp_path, "index.html", CONTROLS)
+    writer = Writer("Email address")
+    field = problem(rule_id, location(text=CONTROLS, tag=start), target=tag[1:])
+
+    plan = plan_fixes(tmp_path, scan(field), FixOptions(values=writer))
+
+    [fix] = plan.fixes
+    position = CONTROLS.index(start) + len(tag)
+    assert fix.edits == (
+        Edit(file="index.html", start=position, end=position, text=' aria-label="Email address"'),
+    )
+    [slot] = writer.slots
+    assert (slot.kind, slot.rule_id, slot.max_length) == ("field-name", rule_id, 100)
+
+
+def test_field_names_need_someone_to_write_them(tmp_path: Path) -> None:
+    write(tmp_path, "index.html", CONTROLS)
+    field = problem("label", location(text=CONTROLS, tag="<input"), target="input")
+    [left] = plan_fixes(tmp_path, scan(field)).unfixed
+    assert left.reason == "needs a field name from a person, or from a model (--text-from claude)"
 
 
 def test_button_names_come_from_the_value_source(tmp_path: Path) -> None:
-    write(tmp_path, "index.html", LINKS)
+    write(tmp_path, "index.html", CONTROLS)
     writer = Writer("Search")
 
     plan = plan_fixes(tmp_path, scan(button_problem("search")), FixOptions(values=writer))
 
     [fix] = plan.fixes
-    position = LINKS.index('<button class="search"') + len("<button")
+    position = CONTROLS.index('<button class="search"') + len("<button")
     assert fix.edits == (
         Edit(file="index.html", start=position, end=position, text=' aria-label="Search"'),
     )
@@ -259,14 +297,14 @@ def test_button_names_come_from_the_value_source(tmp_path: Path) -> None:
 def test_buttons_that_cannot_be_named_are_left_with_the_reason(
     tmp_path: Path, name: str, writer: Writer | None, reason: str
 ) -> None:
-    write(tmp_path, "index.html", LINKS)
+    write(tmp_path, "index.html", CONTROLS)
     plan = plan_fixes(tmp_path, scan(button_problem(name)), FixOptions(values=writer))
     [left] = plan.unfixed
     assert left.reason.startswith(reason)
 
 
 def test_link_names_need_someone_to_write_them(tmp_path: Path) -> None:
-    write(tmp_path, "index.html", LINKS)
+    write(tmp_path, "index.html", CONTROLS)
     plan = plan_fixes(tmp_path, scan(link_problem("cart.html")))
     [left] = plan.unfixed
     assert left.reason == "needs a link name from a person, or from a model (--text-from claude)"
@@ -274,7 +312,7 @@ def test_link_names_need_someone_to_write_them(tmp_path: Path) -> None:
 
 @pytest.mark.parametrize("href", ["cart.html", "mugs.html"], ids=["icon", "decorative-image"])
 def test_link_names_come_from_the_value_source(tmp_path: Path, href: str) -> None:
-    write(tmp_path, "index.html", LINKS)
+    write(tmp_path, "index.html", CONTROLS)
     writer = Writer("Your cart")
     target = f'a[href="{href}"]'
     capture = Capture(image=b"png bytes", context={"link": href})
@@ -288,7 +326,7 @@ def test_link_names_come_from_the_value_source(tmp_path: Path, href: str) -> Non
 
     [fix] = plan.fixes
     assert fix.value == Value(text="Your cart", rationale="It shows a mug.", source="writer")
-    position = LINKS.index(f'<a href="{href}"') + len("<a")
+    position = CONTROLS.index(f'<a href="{href}"') + len("<a")
     assert fix.edits == (
         Edit(file="index.html", start=position, end=position, text=' aria-label="Your cart"'),
     )
@@ -313,7 +351,7 @@ def test_link_names_come_from_the_value_source(tmp_path: Path, href: str) -> Non
 def test_links_that_cannot_take_a_name_are_not_sent_for_one(
     tmp_path: Path, href: str, reason: str
 ) -> None:
-    write(tmp_path, "index.html", LINKS)
+    write(tmp_path, "index.html", CONTROLS)
     writer = Writer("Shop")
     plan = plan_fixes(tmp_path, scan(link_problem(href)), FixOptions(values=writer))
     [left] = plan.unfixed
@@ -322,7 +360,7 @@ def test_links_that_cannot_take_a_name_are_not_sent_for_one(
 
 
 def test_link_names_that_cannot_be_used_are_left_with_the_reason(tmp_path: Path) -> None:
-    write(tmp_path, "index.html", LINKS)
+    write(tmp_path, "index.html", CONTROLS)
     plan = plan_fixes(
         tmp_path, scan(link_problem("cart.html")), FixOptions(values=Writer("Click here"))
     )

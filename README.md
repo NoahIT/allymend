@@ -6,7 +6,7 @@ The name joins "ally", the way a11y (accessibility) is often said, with "mend".
 
 ## Status
 
-Early development, for static HTML sites. Scanning works, and so do the first fixes: a missing page language, and alt text and names for links and buttons, written by Claude when you ask for them.
+Early development, for static HTML sites. Scanning works, and so do the first fixes: a missing page language, and alt text and names for links, buttons and form fields, written by Claude when you ask for them.
 
 ## How it works
 
@@ -23,7 +23,7 @@ Early development, for static HTML sites. Scanning works, and so do the first fi
 
 - Tell you that your site is accessible or compliant with any law. Automated checks find only part of real accessibility problems. The rest needs people, including people who use assistive technology.
 - Patch pages in the browser at runtime. Allymend is not an overlay; it changes source code.
-- Write content on its own. Alt text, link names and similar text need judgment. Allymend drafts alt text and names for links and buttons only when you ask Claude to, and lists every draft for you to read; everything else is marked as needing a person.
+- Write content on its own. Alt text, link names and similar text need judgment. Allymend drafts alt text and names for links, buttons and form fields only when you ask Claude to, and lists every draft for you to read; everything else is marked as needing a person.
 
 ## Trying it
 
@@ -54,7 +54,7 @@ This scans the folder, checks each fix as described in step 4 above, and writes 
 
 ### Text written by Claude
 
-Some fixes need words that a program can't know, such as alt text that describes an image, or a name for a link or button that shows only an icon. Allymend can ask Claude to write them. This is off unless you ask for it, and needs the `claude` extra and an Anthropic API key:
+Some fixes need words that a program can't know, such as alt text that describes an image, a name for a link or button that shows only an icon, or a name for a form field without a label. Allymend can ask Claude to write them. This is off unless you ask for it, and needs the `claude` extra and an Anthropic API key:
 
 ```
 poetry install --all-extras
@@ -63,9 +63,9 @@ poetry run allymend fix path/to/site --text-from claude --show-payload
 poetry run allymend fix path/to/site --text-from claude
 ```
 
-For each image, link or button, Claude receives a picture of it as the browser shows it and the text around it: the page title, the nearest heading, a caption, the link it is or is in and nearby text, each cut to 200 characters. Nothing else from your project is sent. `--show-payload` prints exactly that for every request and stops without sending anything.
+For each image, link, button or form field, Claude receives a picture of it as the browser shows it and the text around it: the page title, the nearest heading, a caption, the link it is or is in and nearby text, each cut to 200 characters. Nothing else from your project is sent. `--show-payload` prints exactly that for every request and stops without sending anything.
 
-The text Claude writes is checked like any other fix and listed in the summary. Read it before applying the patch. A link or button without a name gets an `aria-label`. When an image is all it contains, the image's alt text names it instead, so Claude is asked to say where the link goes or what the button does, and the summary lists its problem as gone too. When Claude can't tell, the link or button is left for you. When it thinks an image is decorative, allymend leaves that for you to decide too, because `alt=""` hides an image from screen readers. The model is `claude-opus-5-5` unless you choose another with `--model`.
+The text Claude writes is checked like any other fix and listed in the summary. Read it before applying the patch. A link, button or form field without a name gets an `aria-label`. When an image is all a link or button contains, the image's alt text names it instead, so Claude is asked to say where the link goes or what the button does, and the summary lists its problem as gone too. For a form field the `aria-label` is a stopgap: screen readers can now say what the field is for, but everyone else still needs a visible label, so add one when you can. When Claude can't tell what an element is for, it's left for you. When it thinks an image is decorative, allymend leaves that for you to decide too, because `alt=""` hides an image from screen readers. The model is `claude-opus-5-5` unless you choose another with `--model`.
 
 ## Development
 
