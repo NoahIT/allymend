@@ -110,14 +110,14 @@ def test_fix_rejects_a_language_that_is_not_a_tag(
     assert "is not a language tag such as en or en-GB" in capsys.readouterr().err
 
 
-def test_show_payload_needs_alt_text(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+def test_show_payload_needs_text_from(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     with pytest.raises(SystemExit) as stop:
         main(["fix", str(tmp_path), "--show-payload"])
     assert stop.value.code == EXIT_ERROR
-    assert "--show-payload needs --alt-text" in capsys.readouterr().err
+    assert "--show-payload needs --text-from" in capsys.readouterr().err
 
 
-def test_alt_text_without_credentials_stops_before_scanning(
+def test_claude_without_credentials_stops_before_scanning(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     for name in ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_PROFILE"):
@@ -126,16 +126,16 @@ def test_alt_text_without_credentials_stops_before_scanning(
     for name in ("HOME", "USERPROFILE", "XDG_CONFIG_HOME", "APPDATA"):
         monkeypatch.setenv(name, str(tmp_path))
     monkeypatch.chdir(tmp_path)
-    assert main(["fix", ".", "--alt-text", "claude"]) == EXIT_ERROR
+    assert main(["fix", ".", "--text-from", "claude"]) == EXIT_ERROR
     assert capsys.readouterr().err.startswith("allymend: no Anthropic credentials were found; ")
 
 
-def test_alt_text_without_the_extra_says_how_to_install_it(
+def test_claude_without_the_extra_says_how_to_install_it(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     monkeypatch.setitem(sys.modules, "allymend.llm.claude", None)
     monkeypatch.chdir(tmp_path)
-    assert main(["fix", ".", "--alt-text", "claude"]) == EXIT_ERROR
+    assert main(["fix", ".", "--text-from", "claude"]) == EXIT_ERROR
     assert capsys.readouterr().err == (
         "allymend: Claude support isn't installed; install it with: "
         'pip install "allymend[claude]"\n'

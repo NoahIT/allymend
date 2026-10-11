@@ -27,7 +27,7 @@ Allymend itself sends nothing over the network in this mode. The pages it loads 
 
 ## Alt text from Claude (opt-in)
 
-Only with `allymend fix --alt-text claude`, and only for images whose source allymend can patch:
+Only with `allymend fix --text-from claude`, and only for images whose source allymend can patch:
 
 - **What is sent:** the image as the browser decoded it, scaled to at most 1568 pixels (or a screenshot when the page can't read the image back), and the text around it. That is the page title, the nearest heading, a caption, the link the image is in and its text, the file name and nearby text, each cut to 200 characters.
 - **Where to:** Anthropic's API, with the user's own credentials, one request per image.
@@ -47,7 +47,7 @@ Only with `allymend fix --alt-text claude`, and only for images whose source all
 |---|---|---|
 | Installation | Python packages and a Chromium build | PyPI and Playwright's download servers |
 | URL scans | Requests to the pages given | Those pages only, with an identifying user agent |
-| `--alt-text claude` | One image and its surrounding text per request | Anthropic's API |
+| `--text-from claude` | One image and its surrounding text per request | Anthropic's API |
 | Polite crawling (planned) | Requests to a whole site | That site, with a rate limit, robots.txt respected and a page cap |
 
 There's no telemetry.

@@ -52,15 +52,15 @@ poetry run allymend fix path/to/site --lang en
 
 This scans the folder, checks each fix as described in step 4 above, and writes the fixes that pass to `allymend.patch`; your files aren't changed. Everything it couldn't fix, including fixes that failed a check, is listed with the reason. Problems that weren't fixed directly but were gone from the page once its fixes were applied are listed separately. Review the patch, then apply it with `git apply allymend.patch` from the folder you ran allymend in. Add `--evidence checks.json` to keep a record of every check.
 
-### Alt text written by Claude
+### Text written by Claude
 
-Images without alt text need words that describe them. Allymend can ask Claude to write them. This is off unless you ask for it, and needs the `claude` extra and an Anthropic API key:
+Some fixes need words that a program can't know, such as alt text that describes an image. Allymend can ask Claude to write them. This is off unless you ask for it, and needs the `claude` extra and an Anthropic API key:
 
 ```
 poetry install --all-extras
 $env:ANTHROPIC_API_KEY = "<your key>"     # export ANTHROPIC_API_KEY=... outside PowerShell
-poetry run allymend fix path/to/site --alt-text claude --show-payload
-poetry run allymend fix path/to/site --alt-text claude
+poetry run allymend fix path/to/site --text-from claude --show-payload
+poetry run allymend fix path/to/site --text-from claude
 ```
 
 For each image, Claude receives the image as the browser shows it and the text around it: the page title, the nearest heading, a caption, the link the image is in and nearby text, each cut to 200 characters. Nothing else from your project is sent. `--show-payload` prints exactly that for every image and stops without sending anything.

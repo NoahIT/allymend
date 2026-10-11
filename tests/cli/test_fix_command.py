@@ -73,7 +73,7 @@ def claude_requests(monkeypatch: pytest.MonkeyPatch) -> Iterator[list[Any]]:
 def test_alt_text_from_claude_is_checked_and_listed_for_review(
     claude_requests: list[Any], capsys: pytest.CaptureFixture[str]
 ) -> None:
-    code = main(["fix", "site", "--lang", "en", "--alt-text", "claude", "--evidence", "e.json"])
+    code = main(["fix", "site", "--lang", "en", "--text-from", "claude", "--evidence", "e.json"])
 
     assert code == EXIT_PROBLEMS
     lines = capsys.readouterr().out.splitlines()
@@ -98,7 +98,7 @@ def test_alt_text_from_claude_is_checked_and_listed_for_review(
 def test_show_payload_sends_nothing_and_writes_nothing(
     claude_requests: list[Any], capsys: pytest.CaptureFixture[str]
 ) -> None:
-    assert main(["fix", "site", "--alt-text", "claude", "--show-payload"]) == EXIT_CLEAN
+    assert main(["fix", "site", "--text-from", "claude", "--show-payload"]) == EXIT_CLEAN
     lines = capsys.readouterr().out.splitlines()
     assert lines[0] == "Would send 1 request to claude-opus-5-5. Nothing has been sent."
     assert "1. shop/mug.html: img" in lines
@@ -122,7 +122,7 @@ def test_the_patch_applies_and_fixes_the_page(
     ]
     assert (
         "  shop/mug.html: Image has no text alternative (image-alt), 1 element: "
-        "needs alt text from a person, or from a model (--alt-text claude)"
+        "needs alt text from a person, or from a model (--text-from claude)"
     ) in lines
     assert (
         Path("allymend.patch")

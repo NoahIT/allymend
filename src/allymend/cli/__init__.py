@@ -50,8 +50,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     """
     parser = _parser()
     args = parser.parse_args(argv)
-    if args.command == "fix" and args.show_payload and args.alt_text is None:
-        parser.error("--show-payload needs --alt-text")
+    if args.command == "fix" and args.show_payload and args.text_from is None:
+        parser.error("--show-payload needs --text-from")
     options = ScanOptions(timeout_ms=round(args.timeout * 1000))
     run = _run_fix if args.command == "fix" else _run_scan
     with _log_to_stderr(quiet=args.quiet):
@@ -84,7 +84,7 @@ def _run_fix(args: argparse.Namespace, options: ScanOptions) -> int:
     if not root.is_dir():
         raise NotAFolderError(args.folder)
     prefix = _patch_prefix(root)
-    writer = _alt_text_writer(args)
+    writer = _text_writer(args)
     result = map_sources(root, scan_directory(root, options))
     captures = {} if writer is None else capture_elements(root, result, {"image-alt"}, options)
     if writer is not None and args.show_payload:
@@ -103,8 +103,8 @@ def _run_fix(args: argparse.Namespace, options: ScanOptions) -> int:
     return _exit_code(result)
 
 
-def _alt_text_writer(args: argparse.Namespace) -> ClaudeValues | None:
-    if args.alt_text is None:
+def _text_writer(args: argparse.Namespace) -> ClaudeValues | None:
+    if args.text_from is None:
         return None
     try:
         from allymend.llm.claude import ClaudeValues  # noqa: PLC0415  only with the claude extra
@@ -274,21 +274,21 @@ def _parser() -> argparse.ArgumentParser:
         help="also write the checks behind each fix as JSON",
     )
     fix.add_argument(
-        "--alt-text",
+        "--text-from",
         choices=["claude"],
         help=(
-            "write missing alt text with a language model; each image and the text around it "
-            "is sent to the model's provider"
+            "write missing text, such as alt text, with a language model; each element and the "
+            "text around it is sent to the model's provider"
         ),
     )
     fix.add_argument(
         "--model",
         metavar="NAME",
-        help="the model that writes alt text (default: claude-opus-5-5)",
+        help="the model that writes the text (default: claude-opus-5-5)",
     )
     fix.add_argument(
         "--show-payload",
         action="store_true",
-        help="with --alt-text, show what would be sent, and stop without sending anything",
+        help="with --text-from, show what would be sent, and stop without sending anything",
     )
     return parser
