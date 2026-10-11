@@ -51,8 +51,9 @@ class HtmlSource:
 def map_sources(root: Path, result: ScanResult) -> ScanResult:
     """Add source locations to the occurrences of a scan of the folder ``root``.
 
-    Each page is read from ``root`` by its relative path. Pages that cannot be read, are not
-    valid UTF-8 or lie outside ``root`` keep their occurrences without locations.
+    Each page is read from ``root`` by its relative path with ``read_source``, so UTF-8 and
+    UTF-16 with a byte order mark both work. Pages that can't be read or decoded, or lie
+    outside ``root``, keep their occurrences without locations.
     """
     return result.model_copy(update={"pages": tuple(_map_page(root, p) for p in result.pages)})
 
@@ -60,10 +61,10 @@ def map_sources(root: Path, result: ScanResult) -> ScanResult:
 def _map_page(root: Path, page: PageResult) -> PageResult:
     if not page.occurrences:
         return page
-    text = read_source(root, page.page)
-    if text is None:
+    read = read_source(root, page.page)
+    if read is None:
         return page
-    source = HtmlSource(text, page.page)
+    source = HtmlSource(read.text, page.page)
     located = tuple(o.model_copy(update={"source": source.locate(o)}) for o in page.occurrences)
     return page.model_copy(update={"occurrences": located})
 

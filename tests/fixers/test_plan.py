@@ -103,14 +103,29 @@ def test_leaves_problems_without_a_source_location(tmp_path: Path) -> None:
     assert plan.unfixed == (unfixed("the element couldn't be traced to its source"),)
 
 
-@pytest.mark.parametrize("data", [None, PAGE.encode("utf-16")], ids=["missing", "not-utf8"])
+@pytest.mark.parametrize(
+    "data",
+    [None, PAGE.replace("Shop", "Caf\xe9").encode("cp1252")],
+    ids=["missing", "windows-1252"],
+)
 def test_leaves_problems_in_files_that_cannot_be_read(tmp_path: Path, data: bytes | None) -> None:
     if data is not None:
         (tmp_path / "index.html").write_bytes(data)
     plan = plan_fixes(tmp_path, scan(problem(source=location())), FixOptions(language="en"))
+    assert plan.unfixed == (unfixed("index.html couldn't be read from the scanned folder"),)
+
+
+def test_leaves_problems_in_utf16_files_with_advice(tmp_path: Path) -> None:
+    (tmp_path / "index.html").write_bytes(b"\xff\xfe" + PAGE.encode("utf-16-le"))
+    source = location(text="\ufeff" + PAGE)
+    plan = plan_fixes(tmp_path, scan(problem(source=source)), FixOptions(language="en"))
     assert plan.unfixed == (
-        unfixed("index.html couldn't be read as UTF-8 from the scanned folder"),
+        unfixed(
+            "index.html is saved as UTF-16, which a patch can't change; save it as UTF-8 to get "
+            "fixes"
+        ),
     )
+    assert plan.changes == ()
 
 
 def test_passes_on_why_a_fixer_refused(tmp_path: Path) -> None:

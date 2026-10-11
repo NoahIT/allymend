@@ -23,8 +23,9 @@ class SourceLocation(_Model):
         file: The file's path relative to the scanned folder, with forward slashes.
         line: The 1-based line of the start tag.
         column: The 1-based column of the start tag.
-        offset: The 0-based character offset of the start tag's ``<`` in the file's bytes
-            decoded as UTF-8, without newline translation and counting a byte order mark.
+        offset: The 0-based character offset of the start tag's ``<`` in the file's text as
+            ``pataisa.files.read_source`` returns it: decoded without newline translation, and
+            counting a byte order mark.
     """
 
     file: str

@@ -53,7 +53,7 @@ def test_offset_points_at_the_tag_whatever_the_line_endings(newline: str) -> Non
 
 
 def test_offset_counts_a_byte_order_mark() -> None:
-    text = "﻿" + PAGE
+    text = "\ufeff" + PAGE
     location = locate(text)
     assert location is not None
     assert text[location.offset : location.offset + 4] == "<img"
@@ -117,6 +117,20 @@ def test_map_sources_reads_each_page_from_the_folder(tmp_path: Path) -> None:
     )
 
 
+@pytest.mark.parametrize("codec", ["utf-16-le", "utf-16-be"])
+def test_map_sources_reads_utf16_pages_with_a_byte_order_mark(tmp_path: Path, codec: str) -> None:
+    text = "\ufeff" + PAGE.replace("\n", "\r\n")
+    write(tmp_path, "index.html", text.encode(codec))
+    result = scan(PageResult(page="index.html", occurrences=(occurrence(),)))
+
+    [page] = map_sources(tmp_path, result).pages
+
+    [mapped] = page.occurrences
+    assert mapped.source is not None
+    assert (mapped.source.line, mapped.source.column) == (5, 20)
+    assert text[mapped.source.offset :].startswith("<img")
+
+
 def test_map_sources_leaves_pages_without_problems_alone(tmp_path: Path) -> None:
     clean = PageResult(page="about.html")
     failed = PageResult(page="missing.html", error="HTTP 404")
@@ -126,11 +140,11 @@ def test_map_sources_leaves_pages_without_problems_alone(tmp_path: Path) -> None
 @pytest.mark.parametrize(
     ("relative", "data"),
     [
-        ("index.html", "<img src='a.png'>".encode("utf-16")),
+        ("index.html", "<img src='caf\xe9.png'>".encode("cp1252")),
         ("missing.html", None),
         ("../outside.html", b"<img src='a.png'>"),
     ],
-    ids=["not-utf8", "missing-file", "outside-the-folder"],
+    ids=["windows-1252", "missing-file", "outside-the-folder"],
 )
 def test_map_sources_skips_files_it_cannot_safely_read(
     tmp_path: Path, relative: str, data: bytes | None

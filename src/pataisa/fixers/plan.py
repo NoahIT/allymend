@@ -15,6 +15,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from pataisa.core.models import Edit, Occurrence, ScanResult, SourceLocation
+    from pataisa.files import SourceText
 
 
 @dataclass(frozen=True, slots=True)
@@ -80,7 +81,7 @@ class _Planner:
     def __init__(self, root: Path, options: FixOptions) -> None:
         self._root = root
         self._options = options
-        self._texts: dict[str, str | None] = {}
+        self._sources: dict[str, SourceText | None] = {}
         self._edits: dict[str, list[Edit]] = {}
 
     def fix(self, page: str, occurrence: Occurrence) -> Fix:
@@ -110,9 +111,14 @@ class _Planner:
         return tuple(changes)
 
     def _text(self, file: str) -> str:
-        if file not in self._texts:
-            self._texts[file] = read_source(self._root, file)
-        text = self._texts[file]
-        if text is None:
-            raise CannotFixError(f"{file} couldn't be read as UTF-8 from the scanned folder")
-        return text
+        if file not in self._sources:
+            self._sources[file] = read_source(self._root, file)
+        source = self._sources[file]
+        if source is None:
+            raise CannotFixError(f"{file} couldn't be read from the scanned folder")
+        if source.encoding != "utf-8":
+            raise CannotFixError(
+                f"{file} is saved as UTF-16, which a patch can't change; save it as UTF-8 to get "
+                "fixes"
+            )
+        return source.text
