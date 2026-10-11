@@ -81,20 +81,34 @@ def render_markdown(result: ScanResult) -> str:
     return "\n".join(lines) + "\n"
 
 
-def render_fix_summary(result: ScanResult, plan: FixPlan, patch_file: Path) -> str:
+def render_evidence(result: ScanResult, plan: FixPlan) -> str:
+    """Render a checked fix plan as versioned JSON: the fixes, what was left, and the checks."""
+    document = {
+        "schema_version": SCHEMA_VERSION,
+        "pataisa_version": __version__,
+        "axe_version": result.axe_version,
+        **plan.model_dump(mode="json"),
+    }
+    return json.dumps(document, indent=2, ensure_ascii=False) + "\n"
+
+
+def render_fix_summary(
+    result: ScanResult, plan: FixPlan, patch_file: Path, evidence_file: Path | None = None
+) -> str:
     """Summarise what a fix run wrote to ``patch_file`` and what it left for a person."""
     files = {edit.file for fix in plan.fixes for edit in fix.edits}
     if plan.fixes:
         lines = [
             f"Wrote fixes for {_count(len(plan.fixes), 'problem')} in "
-            f"{_count(len(files), 'file')} to {patch_file}.",
-            f"Review it, apply it from this folder with: git apply {patch_file}",
-            "Then scan again to confirm the problems are gone.",
+            f"{_count(len(files), 'file')} to {patch_file}. Each was checked in a browser first.",
+            f"Review it, then apply it from this folder with: git apply {patch_file}",
         ]
     elif plan.unfixed:
         lines = [f"Nothing could be fixed automatically, so {patch_file} is empty."]
     else:
         lines = [f"No problems found, so {patch_file} is empty."]
+    if evidence_file is not None:
+        lines.append(f"The checks behind every fix are in {evidence_file}.")
     left = Counter((item.page, item.rule_id, item.reason) for item in plan.unfixed)
     if left:
         lines += ["", f"Not fixed ({_count(len(plan.unfixed), 'problem')}):"]

@@ -35,10 +35,11 @@ def test_lists_what_was_fixed_and_what_was_left() -> None:
     )
     scanned = result(PageResult(page="shop.html", error="HTTP 404"))
 
-    assert render_fix_summary(scanned, plan, PATCH).splitlines() == [
-        "Wrote fixes for 2 problems in 2 files to pataisa.patch.",
-        "Review it, apply it from this folder with: git apply pataisa.patch",
-        "Then scan again to confirm the problems are gone.",
+    assert render_fix_summary(scanned, plan, PATCH, Path("checks.json")).splitlines() == [
+        "Wrote fixes for 2 problems in 2 files to pataisa.patch. Each was checked in a browser "
+        "first.",
+        "Review it, then apply it from this folder with: git apply pataisa.patch",
+        "The checks behind every fix are in checks.json.",
         "",
         "Not fixed (3 problems):",
         "  index.html: Image has no text alternative (image-alt), 2 elements: "

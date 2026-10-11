@@ -1,3 +1,4 @@
+import json
 import os
 import shutil
 import subprocess
@@ -7,6 +8,8 @@ from pathlib import Path
 import pytest
 
 from pataisa.cli import EXIT_CLEAN, EXIT_PROBLEMS, main
+from pataisa.core.models import Edit, SourceLocation
+from pataisa.fixers import FixOptions, fix_html_has_lang
 
 pytestmark = pytest.mark.browser
 
@@ -31,8 +34,9 @@ def test_the_patch_applies_and_fixes_the_page(
 
     lines = capsys.readouterr().out.splitlines()
     assert lines[:2] == [
-        "Wrote fixes for 1 problem in 1 file to pataisa.patch.",
-        "Review it, apply it from this folder with: git apply pataisa.patch",
+        "Wrote fixes for 1 problem in 1 file to pataisa.patch. Each was checked in a browser "
+        "first.",
+        "Review it, then apply it from this folder with: git apply pataisa.patch",
     ]
     assert (
         "  shop/mug.html: Image has no text alternative (image-alt), 1 element: "
@@ -49,6 +53,47 @@ def test_the_patch_applies_and_fixes_the_page(
     subprocess.run([GIT, "apply", "pataisa.patch"], check=True)  # noqa: S603  fixed arguments
     assert main(["scan", "site", "--quiet"]) == EXIT_PROBLEMS
     assert "index.html: no problems found" in capsys.readouterr().out.splitlines()
+
+
+@pytest.mark.usefixtures("site")
+def test_evidence_records_every_check(capsys: pytest.CaptureFixture[str]) -> None:
+    assert main(["fix", "site", "--lang", "en", "--evidence", "checks.json"]) == EXIT_PROBLEMS
+    assert "The checks behind every fix are in checks.json." in capsys.readouterr().out
+
+    evidence = json.loads(Path("checks.json").read_text(encoding="utf-8"))
+    assert (evidence["schema_version"], evidence["axe_version"]) == (1, "4.13.0")
+    assert [fix["page"] for fix in evidence["fixes"]] == ["index.html"]
+    assert [change["file"] for change in evidence["changes"]] == ["index.html"]
+    assert evidence["changes"][0]["diff"].startswith("--- a/site/index.html\n")
+    [verification] = evidence["verifications"]
+    assert [(c["name"], c["passed"]) for c in verification["checks"]] == [
+        ("edits", True),
+        ("scanned", True),
+        ("fixed", True),
+        ("no-new-problems", True),
+        ("tree", True),
+    ]
+
+
+@pytest.mark.usefixtures("site")
+def test_a_fix_that_fails_its_checks_is_left_out(
+    capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def hiding(text: str, location: SourceLocation, options: FixOptions) -> Edit:
+        edit = fix_html_has_lang(text, location, options.language or "en")
+        return edit.model_copy(update={"text": f'{edit.text} aria-hidden="true"'})
+
+    monkeypatch.setattr("pataisa.fixers.plan._FIXERS", {"html-has-lang": hiding})
+
+    assert main(["fix", "site", "--lang", "en"]) == EXIT_PROBLEMS
+
+    lines = capsys.readouterr().out.splitlines()
+    assert lines[0] == "Nothing could be fixed automatically, so pataisa.patch is empty."
+    assert (
+        "  index.html: Page language is not set (html-has-lang), 1 element: "
+        "rejected by the check after fixing: an edit adds aria-hidden"
+    ) in lines
+    assert Path("pataisa.patch").read_bytes() == b""
 
 
 def test_without_a_language_the_patch_is_empty_and_says_why(

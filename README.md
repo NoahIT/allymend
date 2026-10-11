@@ -8,12 +8,12 @@ Pataisa is a tool that finds accessibility problems on websites, explains them i
 
 Early development. Scanning works, and fixing has started. The first release, 0.1.0, will cover static HTML sites and three kinds of fixes: page language, viewport settings and form labels.
 
-## How it will work
+## How it works
 
 1. Scan pages in a real browser with [axe-core](https://github.com/dequelabs/axe-core).
 2. Trace each problem back to the place in your source code that produced it.
 3. Explain who the problem affects and which [WCAG 2.2](https://www.w3.org/TR/WCAG22/) success criterion it relates to.
-4. Where a fix can be made safely, apply it to a temporary copy of your project, scan again and check that:
+4. Where a fix can be made safely, load the page with and without it in a browser and check that:
    - the problem is gone;
    - nothing new broke;
    - the fix didn't simply hide content from assistive technology.
@@ -50,7 +50,7 @@ So far pataisa can fix one problem on its own: a missing page language.
 poetry run pataisa fix path/to/site --lang en
 ```
 
-This scans the folder and writes the fixes to `pataisa.patch`; your files aren't changed. Everything it couldn't fix is listed with the reason. Review the patch, apply it with `git apply pataisa.patch` from the folder you ran pataisa in, then scan again. Checking each fix automatically before you see it (step 4 above) isn't built yet.
+This scans the folder, checks each fix as described in step 4 above, and writes the fixes that pass to `pataisa.patch`; your files aren't changed. Everything it couldn't fix, including fixes that failed a check, is listed with the reason. Review the patch, then apply it with `git apply pataisa.patch` from the folder you ran pataisa in. Add `--evidence checks.json` to keep a record of every check.
 
 ## Development
 

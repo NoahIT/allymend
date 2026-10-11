@@ -8,7 +8,13 @@ from pathlib import Path
 from typing import TYPE_CHECKING, override
 
 from pataisa import __version__
-from pataisa.cli.output import render_fix_summary, render_json, render_markdown, render_text
+from pataisa.cli.output import (
+    render_evidence,
+    render_fix_summary,
+    render_json,
+    render_markdown,
+    render_text,
+)
 from pataisa.errors import (
     FolderOutsideError,
     MixedTargetsError,
@@ -19,6 +25,7 @@ from pataisa.errors import (
 from pataisa.fixers import FixOptions, check_language_tag, plan_fixes
 from pataisa.mapper import map_sources
 from pataisa.scanner import ScanOptions, scan_directory, scan_urls
+from pataisa.verifier import verify_fixes
 
 if TYPE_CHECKING:
     from collections.abc import Iterator, Sequence
@@ -71,9 +78,12 @@ def _run_fix(args: argparse.Namespace, options: ScanOptions) -> int:
         raise NotAFolderError(args.folder)
     prefix = _patch_prefix(root)
     result = map_sources(root, scan_directory(root, options))
-    plan = plan_fixes(root, result, FixOptions(language=args.lang), path_prefix=prefix)
+    planned = plan_fixes(root, result, FixOptions(language=args.lang), path_prefix=prefix)
+    plan = verify_fixes(root, planned, options)
     args.output.write_text(plan.patch, encoding="utf-8", newline="")
-    sys.stdout.write(render_fix_summary(result, plan, args.output))
+    if args.evidence is not None:
+        args.evidence.write_text(render_evidence(result, plan), encoding="utf-8", newline="\n")
+    sys.stdout.write(render_fix_summary(result, plan, args.output, args.evidence))
     return _exit_code(result)
 
 
@@ -198,7 +208,8 @@ def _parser() -> argparse.ArgumentParser:
         help="write fixes for a folder of HTML files as a patch",
         description=(
             "Scan a folder of HTML files and write a patch that fixes the problems pataisa can "
-            "fix on its own. Your files aren't changed."
+            "fix on its own. Each fix is checked in a browser before it's written. Your files "
+            "aren't changed."
         ),
     )
     fix.add_argument("folder", help="the folder of HTML files, inside the current folder")
@@ -214,5 +225,11 @@ def _parser() -> argparse.ArgumentParser:
         default=Path("pataisa.patch"),
         metavar="FILE",
         help="where to write the patch (default: pataisa.patch)",
+    )
+    fix.add_argument(
+        "--evidence",
+        type=Path,
+        metavar="FILE",
+        help="also write the checks behind each fix as JSON",
     )
     return parser
