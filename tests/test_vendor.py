@@ -1,7 +1,7 @@
 import hashlib
 from importlib.resources import files
 
-AXE_CORE = files("pataisa").joinpath("_vendor", "axe-core")
+AXE_CORE = files("allymend").joinpath("_vendor", "axe-core")
 AXE_SHA256 = "c24f097bd2f451d4f933e8bc7d8d539f8672a2ebcb5cc9f9f3eec8ca9470a0c1"
 
 

@@ -10,11 +10,11 @@ from playwright.sync_api import Error as PlaywrightError
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 from playwright.sync_api import sync_playwright
 
-from pataisa import __version__
-from pataisa.core.models import PageResult, ScanResult
-from pataisa.errors import AxeResultError, BrowserNotInstalledError, InvalidURLError, NoPagesError
-from pataisa.scanner.axe import AXE_VERSION, WCAG_TAGS, axe_source, parse_violations
-from pataisa.scanner.site import find_pages, serve
+from allymend import __version__
+from allymend.core.models import PageResult, ScanResult
+from allymend.errors import AxeResultError, BrowserNotInstalledError, InvalidURLError, NoPagesError
+from allymend.scanner.axe import AXE_VERSION, WCAG_TAGS, axe_source, parse_violations
+from allymend.scanner.site import find_pages, serve
 
 if TYPE_CHECKING:
     from collections.abc import Iterator, Sequence
@@ -29,14 +29,14 @@ _POLL_MS = 100
 
 _RUN_AXE = """
 options => {
-  if (window.__pataisaRun === undefined) {
-    window.__pataisaRun = null;
+  if (window.__allymendRun === undefined) {
+    window.__allymendRun = null;
     axe.run(document, options).then(
-      results => { window.__pataisaRun = { results }; },
-      error => { window.__pataisaRun = { error: String(error) }; },
+      results => { window.__allymendRun = { results }; },
+      error => { window.__allymendRun = { error: String(error) }; },
     );
   }
-  return window.__pataisaRun;
+  return window.__allymendRun;
 }
 """
 
@@ -224,7 +224,7 @@ def _user_agent(browser: Browser) -> str:
         default = str(page.evaluate("navigator.userAgent"))
     finally:
         page.close()
-    return f"{default} pataisa/{__version__}"
+    return f"{default} allymend/{__version__}"
 
 
 def _first_line(message: str) -> str:

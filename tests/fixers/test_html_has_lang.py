@@ -3,11 +3,11 @@ from pathlib import Path
 
 import pytest
 
-from pataisa.core.models import SourceLocation
-from pataisa.errors import CannotFixError
-from pataisa.fixers import apply_edits, fix_html_has_lang
-from pataisa.mapper import map_sources
-from pataisa.scanner import scan_directory
+from allymend.core.models import SourceLocation
+from allymend.errors import CannotFixError
+from allymend.fixers import apply_edits, fix_html_has_lang
+from allymend.mapper import map_sources
+from allymend.scanner import scan_directory
 
 REST = "<head><title>Shop</title></head><body><h1>Shop</h1></body></html>"
 

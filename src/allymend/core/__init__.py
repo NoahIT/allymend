@@ -1,4 +1,4 @@
-from pataisa.core.models import (
+from allymend.core.models import (
     Edit,
     Impact,
     Occurrence,

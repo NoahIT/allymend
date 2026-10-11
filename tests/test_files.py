@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from pataisa.files import SourceText, read_source
+from allymend.files import SourceText, read_source
 
 TEXT = "<!doctype html>\r\n<p>Caf\xe9 \U0001f642</p>\n"
 

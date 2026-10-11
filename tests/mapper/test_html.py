@@ -2,8 +2,8 @@ from pathlib import Path
 
 import pytest
 
-from pataisa.core.models import Impact, Occurrence, PageResult, ScanResult, SourceLocation
-from pataisa.mapper import HtmlSource, map_sources
+from allymend.core.models import Impact, Occurrence, PageResult, ScanResult, SourceLocation
+from allymend.mapper import HtmlSource, map_sources
 
 PAGE = (
     "<!doctype html>\n"

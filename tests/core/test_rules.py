@@ -2,7 +2,7 @@ import re
 
 import pytest
 
-from pataisa.core.rules import CRITERIA, RULES, Criterion, Remediability, Rule
+from allymend.core.rules import CRITERIA, RULES, Criterion, Remediability, Rule
 
 WEBAIM_TOP_SIX = {
     "color-contrast",

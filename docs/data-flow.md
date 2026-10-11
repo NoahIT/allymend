@@ -17,13 +17,13 @@ flowchart LR
 
 ## Local scan (the default)
 
-1. Pataisa serves the project's files on a random port bound to `127.0.0.1`.
-2. Headless Chromium loads each page. axe-core runs inside the page and returns its results to pataisa.
-3. Pataisa reads the project's source files to find where each problem comes from.
+1. Allymend serves the project's files on a random port bound to `127.0.0.1`.
+2. Headless Chromium loads each page. axe-core runs inside the page and returns its results to allymend.
+3. Allymend reads the project's source files to find where each problem comes from.
 4. Fixes are applied to a temporary copy of the project, which is served and scanned again to check them. The copy is deleted afterwards.
 5. Reports and patch files are written where the user asks.
 
-Pataisa itself sends nothing over the network in this mode. The pages it loads can still fetch their own resources, such as fonts or scripts from a CDN, just as they would in a normal browser.
+Allymend itself sends nothing over the network in this mode. The pages it loads can still fetch their own resources, such as fonts or scripts from a CDN, just as they would in a normal browser.
 
 ## What gets stored
 

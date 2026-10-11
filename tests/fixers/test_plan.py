@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from pataisa.core.models import (
+from allymend.core.models import (
     Edit,
     Impact,
     Occurrence,
@@ -11,7 +11,7 @@ from pataisa.core.models import (
     SourceLocation,
     Unfixed,
 )
-from pataisa.fixers import FixOptions, plan_fixes, unified_diff
+from allymend.fixers import FixOptions, plan_fixes, unified_diff
 
 PAGE = '<!doctype html>\n<html>\n<head><title>Shop</title></head>\n<body><img src="a.png">\n'
 FIXED = PAGE.replace("<html>", '<html lang="en">')

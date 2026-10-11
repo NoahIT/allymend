@@ -25,7 +25,7 @@ class SourceLocation(_Model):
         line: The 1-based line of the start tag.
         column: The 1-based column of the start tag.
         offset: The 0-based character offset of the start tag's ``<`` in the file's text as
-            ``pataisa.files.read_source`` returns it: decoded without newline translation, and
+            ``allymend.files.read_source`` returns it: decoded without newline translation, and
             counting a byte order mark.
         found_by: ``selector`` when axe-core's selector matched the element in the source.
             ``attributes`` when the selector didn't, and the element was found by an ``id``,

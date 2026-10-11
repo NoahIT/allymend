@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from pataisa.cli import EXIT_CLEAN, EXIT_ERROR, EXIT_PROBLEMS, main
-from pataisa.scanner.site import serve
+from allymend.cli import EXIT_CLEAN, EXIT_ERROR, EXIT_PROBLEMS, main
+from allymend.scanner.site import serve
 
 pytestmark = pytest.mark.browser
 
@@ -57,8 +57,8 @@ def test_writes_json_to_a_file(
     assert page["page"] == "index.html"
     assert [o["rule_id"] for o in page["occurrences"]] == ["html-has-lang"]
     assert capsys.readouterr().err.splitlines() == [
-        "pataisa: scanning 1 of 1: index.html",
-        f"pataisa: wrote {report}",
+        "allymend: scanning 1 of 1: index.html",
+        f"allymend: wrote {report}",
     ]
 
 
@@ -114,8 +114,8 @@ def test_page_that_cannot_be_scanned_exits_with_2(
     captured = capsys.readouterr()
     assert f"{url}: could not be scanned (HTTP 404)" in captured.out
     assert captured.err.splitlines() == [
-        f"pataisa: scanning 1 of 1: {url}",
-        f"pataisa: could not scan {url}: HTTP 404",
+        f"allymend: scanning 1 of 1: {url}",
+        f"allymend: could not scan {url}: HTTP 404",
     ]
 
 
@@ -128,4 +128,4 @@ def test_quiet_shows_only_warnings(
         missing = f"{base_url}missing.html"
         code = main(["scan", f"{base_url}index.html", missing, "--quiet", "--output", str(report)])
     assert code == EXIT_ERROR
-    assert capsys.readouterr().err == f"pataisa: could not scan {missing}: HTTP 404\n"
+    assert capsys.readouterr().err == f"allymend: could not scan {missing}: HTTP 404\n"

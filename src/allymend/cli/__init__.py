@@ -7,30 +7,30 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING, override
 
-from pataisa import __version__
-from pataisa.cli.output import (
+from allymend import __version__
+from allymend.cli.output import (
     render_evidence,
     render_fix_summary,
     render_json,
     render_markdown,
     render_text,
 )
-from pataisa.errors import (
+from allymend.errors import (
+    AllymendError,
     FolderOutsideError,
     MixedTargetsError,
     NotAFolderError,
-    PataisaError,
     UnknownTargetError,
 )
-from pataisa.fixers import FixOptions, check_language_tag, plan_fixes
-from pataisa.mapper import map_sources
-from pataisa.scanner import ScanOptions, scan_directory, scan_urls
-from pataisa.verifier import verify_fixes
+from allymend.fixers import FixOptions, check_language_tag, plan_fixes
+from allymend.mapper import map_sources
+from allymend.scanner import ScanOptions, scan_directory, scan_urls
+from allymend.verifier import verify_fixes
 
 if TYPE_CHECKING:
     from collections.abc import Iterator, Sequence
 
-    from pataisa.core.models import ScanResult
+    from allymend.core.models import ScanResult
 
 EXIT_CLEAN = 0
 EXIT_PROBLEMS = 1
@@ -38,10 +38,10 @@ EXIT_ERROR = 2
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """Run the pataisa command line and return its exit code.
+    """Run the allymend command line and return its exit code.
 
     The exit code is 0 when no problems were found, 1 when problems were found, and 2 when
-    pataisa could not run or a page could not be scanned. Progress, warnings and errors go to
+    allymend could not run or a page could not be scanned. Progress, warnings and errors go to
     standard error.
     """
     args = _parser().parse_args(argv)
@@ -50,8 +50,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     with _log_to_stderr(quiet=args.quiet):
         try:
             return run(args, options)
-        except PataisaError as error:
-            sys.stderr.write(f"pataisa: {error}\n")
+        except AllymendError as error:
+            sys.stderr.write(f"allymend: {error}\n")
             return EXIT_ERROR
 
 
@@ -68,7 +68,7 @@ def _run_scan(args: argparse.Namespace, options: ScanOptions) -> int:
     else:
         args.output.write_text(report, encoding="utf-8", newline="\n")
         if not args.quiet:
-            sys.stderr.write(f"pataisa: wrote {args.output}\n")
+            sys.stderr.write(f"allymend: wrote {args.output}\n")
     return _exit_code(result)
 
 
@@ -97,9 +97,9 @@ def _patch_prefix(root: Path) -> str:
 
 @contextmanager
 def _log_to_stderr(*, quiet: bool) -> Iterator[None]:
-    package = logging.getLogger("pataisa")
+    package = logging.getLogger("allymend")
     handler = logging.StreamHandler(sys.stderr)
-    handler.setFormatter(logging.Formatter("pataisa: %(message)s"))
+    handler.setFormatter(logging.Formatter("allymend: %(message)s"))
     level = package.level
     package.setLevel(logging.WARNING if quiet else logging.INFO)
     package.addHandler(handler)
@@ -155,12 +155,12 @@ class _ArgumentParser(argparse.ArgumentParser):
 
 def _parser() -> argparse.ArgumentParser:
     parser = _ArgumentParser(
-        prog="pataisa",
+        prog="allymend",
         description="Find accessibility problems in web pages.",
-        epilog="Arguments can be read from a file, one per line: pataisa scan @targets.txt",
+        epilog="Arguments can be read from a file, one per line: allymend scan @targets.txt",
         fromfile_prefix_chars="@",
     )
-    parser.add_argument("--version", action="version", version=f"pataisa {__version__}")
+    parser.add_argument("--version", action="version", version=f"allymend {__version__}")
     commands = parser.add_subparsers(dest="command", required=True)
 
     shared = _ArgumentParser(add_help=False)
@@ -207,7 +207,7 @@ def _parser() -> argparse.ArgumentParser:
         parents=[shared],
         help="write fixes for a folder of HTML files as a patch",
         description=(
-            "Scan a folder of HTML files and write a patch that fixes the problems pataisa can "
+            "Scan a folder of HTML files and write a patch that fixes the problems allymend can "
             "fix on its own. Each fix is checked in a browser before it's written. Your files "
             "aren't changed."
         ),
@@ -222,9 +222,9 @@ def _parser() -> argparse.ArgumentParser:
     fix.add_argument(
         "--output",
         type=Path,
-        default=Path("pataisa.patch"),
+        default=Path("allymend.patch"),
         metavar="FILE",
-        help="where to write the patch (default: pataisa.patch)",
+        help="where to write the patch (default: allymend.patch)",
     )
     fix.add_argument(
         "--evidence",

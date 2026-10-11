@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from pataisa.core.models import Edit
-from pataisa.fixers import apply_edits, unified_diff
+from allymend.core.models import Edit
+from allymend.fixers import apply_edits, unified_diff
 
 GIT = shutil.which("git")
 

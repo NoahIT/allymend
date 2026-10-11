@@ -3,12 +3,12 @@ from pathlib import Path
 
 import pytest
 
-from pataisa.core.models import Edit, FileChange, Fix, FixPlan
-from pataisa.fixers import FixOptions, apply_edits, plan_fixes, unified_diff
-from pataisa.mapper import map_sources
-from pataisa.scanner import ScanOptions, scan_directory
-from pataisa.verifier import verify_fixes
-from pataisa.verifier.verify import _check_edits, _check_tree
+from allymend.core.models import Edit, FileChange, Fix, FixPlan
+from allymend.fixers import FixOptions, apply_edits, plan_fixes, unified_diff
+from allymend.mapper import map_sources
+from allymend.scanner import ScanOptions, scan_directory
+from allymend.verifier import verify_fixes
+from allymend.verifier.verify import _check_edits, _check_tree
 
 IMAGE = '<img src="mug.png" alt="Mug">'
 PAGE = (

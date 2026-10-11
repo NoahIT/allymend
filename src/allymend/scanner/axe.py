@@ -2,9 +2,9 @@ from importlib.resources import files
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from pataisa.core.models import Impact, Occurrence
-from pataisa.core.wcag import success_criteria
-from pataisa.errors import AxeResultError
+from allymend.core.models import Impact, Occurrence
+from allymend.core.wcag import success_criteria
+from allymend.errors import AxeResultError
 
 AXE_VERSION = "4.13.0"
 WCAG_TAGS = ("wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa")
@@ -12,7 +12,7 @@ WCAG_TAGS = ("wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa")
 
 def axe_source() -> str:
     """Return the vendored axe-core script."""
-    script = files("pataisa").joinpath("_vendor", "axe-core", "axe.min.js")
+    script = files("allymend").joinpath("_vendor", "axe-core", "axe.min.js")
     return script.read_text(encoding="utf-8")
 
 

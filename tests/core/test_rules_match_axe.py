@@ -3,9 +3,9 @@ from typing import Any
 import pytest
 from playwright.sync_api import sync_playwright
 
-from pataisa.core.rules import CRITERIA, RULES
-from pataisa.core.wcag import success_criteria
-from pataisa.scanner.axe import WCAG_TAGS, axe_source
+from allymend.core.rules import CRITERIA, RULES
+from allymend.core.wcag import success_criteria
+from allymend.scanner.axe import WCAG_TAGS, axe_source
 
 pytestmark = pytest.mark.browser
 

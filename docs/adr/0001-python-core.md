@@ -6,7 +6,7 @@ Date: 2026-10-10
 
 ## Context
 
-Pataisa scans pages in a browser, traces problems back to source files, edits those files and checks the result. Most of that works in any language with good browser automation. One part doesn't: tracing elements in a React or Vue app back to their source needs code that runs inside the project's JavaScript build, such as a Vite or webpack plugin that adds source locations to elements.
+Allymend scans pages in a browser, traces problems back to source files, edits those files and checks the result. Most of that works in any language with good browser automation. One part doesn't: tracing elements in a React or Vue app back to their source needs code that runs inside the project's JavaScript build, such as a Vite or webpack plugin that adds source locations to elements.
 
 I considered three options:
 

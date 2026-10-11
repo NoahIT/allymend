@@ -3,15 +3,15 @@ from pathlib import Path
 
 import pytest
 
-from pataisa import __version__
-from pataisa.cli import EXIT_ERROR, main
+from allymend import __version__
+from allymend.cli import EXIT_ERROR, main
 
 
 def test_version(capsys: pytest.CaptureFixture[str]) -> None:
     with pytest.raises(SystemExit) as stop:
         main(["--version"])
     assert stop.value.code == 0
-    assert capsys.readouterr().out == f"pataisa {__version__}\n"
+    assert capsys.readouterr().out == f"allymend {__version__}\n"
 
 
 def test_scan_needs_a_target() -> None:
@@ -38,7 +38,7 @@ def test_rejects_targets_that_are_neither_folders_nor_urls(
 ) -> None:
     assert main(["scan", target]) == EXIT_ERROR
     assert capsys.readouterr().err == (
-        f"pataisa: {target} is neither a folder nor an http or https URL\n"
+        f"allymend: {target} is neither a folder nor an http or https URL\n"
     )
 
 
@@ -53,7 +53,7 @@ def test_scans_either_one_folder_or_urls(
     target = extra if extra.startswith("https://") else str(second)
     assert main(["scan", str(tmp_path), target]) == EXIT_ERROR
     assert capsys.readouterr().err == (
-        "pataisa: scan either one folder or one or more URLs, not both\n"
+        "allymend: scan either one folder or one or more URLs, not both\n"
     )
 
 
@@ -64,7 +64,7 @@ def test_reads_targets_from_a_file_and_skips_comments_and_blank_lines(
     targets.write_text("# public pages\n\n  missing-folder  \n", encoding="utf-8")
     assert main(["scan", f"@{targets}"]) == EXIT_ERROR
     assert capsys.readouterr().err == (
-        "pataisa: missing-folder is neither a folder nor an http or https URL\n"
+        "allymend: missing-folder is neither a folder nor an http or https URL\n"
     )
 
 
@@ -79,7 +79,7 @@ def test_reports_a_folder_without_html_files(
 def test_fix_needs_a_folder(target: str, capsys: pytest.CaptureFixture[str]) -> None:
     assert main(["fix", target]) == EXIT_ERROR
     assert capsys.readouterr().err == (
-        f"pataisa: {target} is not a folder; fixes need the site's source files\n"
+        f"allymend: {target} is not a folder; fixes need the site's source files\n"
     )
 
 
@@ -93,7 +93,7 @@ def test_fix_needs_the_folder_inside_the_current_one(
     monkeypatch.chdir(work)
     assert main(["fix", str(site)]) == EXIT_ERROR
     assert capsys.readouterr().err == (
-        f"pataisa: {site} is outside the current folder; run pataisa fix from a folder that "
+        f"allymend: {site} is outside the current folder; run allymend fix from a folder that "
         "contains it, so the patch applies from there\n"
     )
 
@@ -109,7 +109,7 @@ def test_fix_rejects_a_language_that_is_not_a_tag(
 
 
 def test_leaves_logging_as_it_was(tmp_path: Path) -> None:
-    package = logging.getLogger("pataisa")
+    package = logging.getLogger("allymend")
     before = (package.level, list(package.handlers))
     main(["scan", str(tmp_path)])
     assert (package.level, package.handlers) == before

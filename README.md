@@ -1,8 +1,8 @@
-# pataisa
+# allymend
 
-Pataisa is a tool that finds accessibility problems on websites, explains them in plain language and proposes fixes to the site's source code. Each fix is checked before you see it.
+Allymend is a tool that finds accessibility problems on websites, explains them in plain language and proposes fixes to the site's source code. Each fix is checked before you see it.
 
-*Pataisa* is Lithuanian for "correction".
+The name joins "ally", the way a11y (accessibility) is often said, with "mend".
 
 ## Status
 
@@ -22,7 +22,7 @@ Early development. Scanning works, and fixing has started. The first release, 0.
 ## What it won't do
 
 - Tell you that your site is accessible or compliant with any law. Automated checks find only part of real accessibility problems. The rest needs people, including people who use assistive technology.
-- Patch pages in the browser at runtime. Pataisa is not an overlay; it changes source code.
+- Patch pages in the browser at runtime. Allymend is not an overlay; it changes source code.
 - Invent content. Alt text, link names and similar text need your judgment, so those findings are marked as needing a person.
 
 ## Trying it
@@ -30,13 +30,13 @@ Early development. Scanning works, and fixing has started. The first release, 0.
 ```
 poetry install
 poetry run playwright install chromium
-poetry run pataisa scan path/to/site
-poetry run pataisa scan https://www.w3.org/WAI/demos/bad/before/home.html
+poetry run allymend scan path/to/site
+poetry run allymend scan https://www.w3.org/WAI/demos/bad/before/home.html
 ```
 
 A folder is served locally and every HTML file in it is scanned, and each problem is traced to the line in your file that produces it. You can also give one or more URLs, and each of those pages is scanned. Add `--format json` for machine-readable output, or `--format markdown` for a report grouped by rule.
 
-To scan a list of pages, put one URL per line in a file and pass it with `@`, for example `poetry run pataisa scan @live/targets.txt`.
+To scan a list of pages, put one URL per line in a file and pass it with `@`, for example `poetry run allymend scan @live/targets.txt`.
 
 The report goes to standard output, or to a file with `--output`. Progress and warnings go to standard error, so they never end up in the report. `--quiet` hides the progress.
 
@@ -44,13 +44,13 @@ The exit code is 0 when nothing was found, 1 when problems were found, and 2 whe
 
 ### Fixing
 
-So far pataisa can fix one problem on its own: a missing page language.
+So far allymend can fix one problem on its own: a missing page language.
 
 ```
-poetry run pataisa fix path/to/site --lang en
+poetry run allymend fix path/to/site --lang en
 ```
 
-This scans the folder, checks each fix as described in step 4 above, and writes the fixes that pass to `pataisa.patch`; your files aren't changed. Everything it couldn't fix, including fixes that failed a check, is listed with the reason. Review the patch, then apply it with `git apply pataisa.patch` from the folder you ran pataisa in. Add `--evidence checks.json` to keep a record of every check.
+This scans the folder, checks each fix as described in step 4 above, and writes the fixes that pass to `allymend.patch`; your files aren't changed. Everything it couldn't fix, including fixes that failed a check, is listed with the reason. Review the patch, then apply it with `git apply allymend.patch` from the folder you ran allymend in. Add `--evidence checks.json` to keep a record of every check.
 
 ## Development
 

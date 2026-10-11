@@ -1,11 +1,11 @@
 from pathlib import Path
 
 
-class PataisaError(Exception):
-    """Base class for errors that pataisa reports to its user."""
+class AllymendError(Exception):
+    """Base class for errors that allymend reports to its user."""
 
 
-class NoPagesError(PataisaError):
+class NoPagesError(AllymendError):
     """The folder to scan contains no HTML files."""
 
     def __init__(self, root: Path) -> None:
@@ -13,7 +13,7 @@ class NoPagesError(PataisaError):
         self.root = root
 
 
-class UnknownTargetError(PataisaError):
+class UnknownTargetError(AllymendError):
     """The scan target is neither a folder nor an http or https URL."""
 
     def __init__(self, target: str) -> None:
@@ -21,14 +21,14 @@ class UnknownTargetError(PataisaError):
         self.target = target
 
 
-class MixedTargetsError(PataisaError):
+class MixedTargetsError(AllymendError):
     """More than one folder, or a folder together with URLs, was given to scan."""
 
     def __init__(self) -> None:
         super().__init__("scan either one folder or one or more URLs, not both")
 
 
-class NotAFolderError(PataisaError):
+class NotAFolderError(AllymendError):
     """A command that needs the site's source files was given something other than a folder."""
 
     def __init__(self, target: str) -> None:
@@ -36,18 +36,18 @@ class NotAFolderError(PataisaError):
         self.target = target
 
 
-class FolderOutsideError(PataisaError):
+class FolderOutsideError(AllymendError):
     """The folder to fix lies outside the current folder, so a patch can't be applied from here."""
 
     def __init__(self, folder: Path) -> None:
         super().__init__(
-            f"{folder} is outside the current folder; run pataisa fix from a folder that "
+            f"{folder} is outside the current folder; run allymend fix from a folder that "
             "contains it, so the patch applies from there"
         )
         self.folder = folder
 
 
-class InvalidURLError(PataisaError):
+class InvalidURLError(AllymendError):
     """The URL to scan is not an http or https address."""
 
     def __init__(self, url: str) -> None:
@@ -55,14 +55,14 @@ class InvalidURLError(PataisaError):
         self.url = url
 
 
-class AxeResultError(PataisaError):
+class AxeResultError(AllymendError):
     """axe-core returned something that is not shaped like its results."""
 
     def __init__(self) -> None:
         super().__init__("axe-core returned results in an unexpected format")
 
 
-class CannotFixError(PataisaError):
+class CannotFixError(AllymendError):
     """A problem can't be fixed automatically where it was found in the source."""
 
     def __init__(self, reason: str) -> None:
@@ -70,7 +70,7 @@ class CannotFixError(PataisaError):
         self.reason = reason
 
 
-class BrowserNotInstalledError(PataisaError):
+class BrowserNotInstalledError(AllymendError):
     """Playwright's Chromium build is missing."""
 
     def __init__(self) -> None:

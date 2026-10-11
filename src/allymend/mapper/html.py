@@ -5,8 +5,8 @@ from typing import TYPE_CHECKING, Literal
 
 from justhtml import JustHTML, SelectorError
 
-from pataisa.core.models import Occurrence, PageResult, ScanResult, SourceLocation
-from pataisa.files import read_source
+from allymend.core.models import Occurrence, PageResult, ScanResult, SourceLocation
+from allymend.files import read_source
 
 if TYPE_CHECKING:
     from pathlib import Path

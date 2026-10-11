@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from collections.abc import Iterable
 
-    from pataisa.core.models import Edit
+    from allymend.core.models import Edit
 
 _NO_NEWLINE = "\\ No newline at end of file\n"
 

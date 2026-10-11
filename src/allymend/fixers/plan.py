@@ -4,18 +4,18 @@ from dataclasses import dataclass
 from types import MappingProxyType
 from typing import TYPE_CHECKING
 
-from pataisa.core.models import FileChange, Fix, FixPlan, Unfixed
-from pataisa.errors import CannotFixError
-from pataisa.files import read_source
-from pataisa.fixers.edits import apply_edits, unified_diff
-from pataisa.fixers.html_has_lang import check_language_tag, fix_html_has_lang
+from allymend.core.models import FileChange, Fix, FixPlan, Unfixed
+from allymend.errors import CannotFixError
+from allymend.files import read_source
+from allymend.fixers.edits import apply_edits, unified_diff
+from allymend.fixers.html_has_lang import check_language_tag, fix_html_has_lang
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping
     from pathlib import Path
 
-    from pataisa.core.models import Edit, Occurrence, ScanResult, SourceLocation
-    from pataisa.files import SourceText
+    from allymend.core.models import Edit, Occurrence, ScanResult, SourceLocation
+    from allymend.files import SourceText
 
 
 @dataclass(frozen=True, slots=True)

@@ -1,6 +1,6 @@
 import pytest
 
-from pataisa.core.wcag import success_criteria
+from allymend.core.wcag import success_criteria
 
 
 @pytest.mark.parametrize(

@@ -6,16 +6,16 @@ from collections import Counter
 from typing import TYPE_CHECKING
 from urllib.parse import quote
 
-from pataisa.core.models import Check, Unfixed, Verification
-from pataisa.scanner import open_browser
-from pataisa.scanner.site import serve
+from allymend.core.models import Check, Unfixed, Verification
+from allymend.scanner import open_browser
+from allymend.scanner.site import serve
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
     from pathlib import Path
 
-    from pataisa.core.models import FileChange, Fix, FixPlan, PageResult
-    from pataisa.scanner import BrowserSession, ScanOptions
+    from allymend.core.models import FileChange, Fix, FixPlan, PageResult
+    from allymend.scanner import BrowserSession, ScanOptions
 
 logger = logging.getLogger(__name__)
 

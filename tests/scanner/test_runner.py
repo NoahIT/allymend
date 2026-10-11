@@ -5,9 +5,9 @@ from pathlib import Path
 
 import pytest
 
-from pataisa.errors import BrowserNotInstalledError
-from pataisa.scanner import ScanOptions, open_browser, scan_directory, scan_url, scan_urls
-from pataisa.scanner.site import serve
+from allymend.errors import BrowserNotInstalledError
+from allymend.scanner import ScanOptions, open_browser, scan_directory, scan_url, scan_urls
+from allymend.scanner.site import serve
 
 pytestmark = pytest.mark.browser
 
@@ -86,11 +86,11 @@ def test_logs_each_page_and_each_failure(
     tmp_path: Path, write_page: Callable[..., Path], caplog: pytest.LogCaptureFixture
 ) -> None:
     write_page("index.html")
-    caplog.set_level(logging.INFO, logger="pataisa")
+    caplog.set_level(logging.INFO, logger="allymend")
     with serve(tmp_path) as base_url:
         home, missing = f"{base_url}index.html", f"{base_url}missing.html"
         scan_urls([home, missing])
-    runner = "pataisa.scanner.runner"
+    runner = "allymend.scanner.runner"
     assert caplog.record_tuples == [
         (runner, logging.INFO, f"scanning 1 of 2: {home}"),
         (runner, logging.INFO, f"scanning 2 of 2: {missing}"),

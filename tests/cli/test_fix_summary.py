@@ -1,9 +1,9 @@
 from pathlib import Path
 
-from pataisa.cli.output import render_fix_summary
-from pataisa.core.models import Edit, Fix, FixPlan, PageResult, ScanResult, Unfixed
+from allymend.cli.output import render_fix_summary
+from allymend.core.models import Edit, Fix, FixPlan, PageResult, ScanResult, Unfixed
 
-PATCH = Path("pataisa.patch")
+PATCH = Path("allymend.patch")
 
 
 def result(*pages: PageResult) -> ScanResult:
@@ -36,9 +36,9 @@ def test_lists_what_was_fixed_and_what_was_left() -> None:
     scanned = result(PageResult(page="shop.html", error="HTTP 404"))
 
     assert render_fix_summary(scanned, plan, PATCH, Path("checks.json")).splitlines() == [
-        "Wrote fixes for 2 problems in 2 files to pataisa.patch. Each was checked in a browser "
+        "Wrote fixes for 2 problems in 2 files to allymend.patch. Each was checked in a browser "
         "first.",
-        "Review it, then apply it from this folder with: git apply pataisa.patch",
+        "Review it, then apply it from this folder with: git apply allymend.patch",
         "The checks behind every fix are in checks.json.",
         "",
         "Not fixed (3 problems):",
@@ -58,12 +58,12 @@ def test_says_when_nothing_could_be_fixed() -> None:
         changes=(),
     )
     assert render_fix_summary(result(), plan, PATCH).splitlines()[0] == (
-        "Nothing could be fixed automatically, so pataisa.patch is empty."
+        "Nothing could be fixed automatically, so allymend.patch is empty."
     )
 
 
 def test_says_when_there_was_nothing_to_fix() -> None:
     plan = FixPlan(fixes=(), unfixed=(), changes=())
     assert render_fix_summary(result(), plan, PATCH) == (
-        "No problems found, so pataisa.patch is empty.\n"
+        "No problems found, so allymend.patch is empty.\n"
     )

@@ -25,4 +25,4 @@ test:
 	poetry run pytest --cov
 
 live:
-	-poetry run pataisa scan --format markdown --output live/report.md @live/targets.txt
+	-poetry run allymend scan --format markdown --output live/report.md @live/targets.txt

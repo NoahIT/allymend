@@ -4,7 +4,7 @@ from urllib.request import urlopen
 
 import pytest
 
-from pataisa.scanner.site import find_pages, serve
+from allymend.scanner.site import find_pages, serve
 
 
 def touch(root: Path, relative: str, content: str = "") -> None:

@@ -1,4 +1,4 @@
-from pataisa.scanner.runner import (
+from allymend.scanner.runner import (
     BrowserSession,
     PageScan,
     ScanOptions,

@@ -3,13 +3,13 @@ from __future__ import annotations
 import re
 from typing import TYPE_CHECKING
 
-from pataisa.core.models import Edit
-from pataisa.errors import CannotFixError
+from allymend.core.models import Edit
+from allymend.errors import CannotFixError
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
-    from pataisa.core.models import SourceLocation
+    from allymend.core.models import SourceLocation
 
 _LANGUAGE = re.compile(r"[A-Za-z]{2,3}(-[A-Za-z0-9]{1,8})*")
 _HTML_START = re.compile(r"<html(?=[\t\n\f\r />])", re.IGNORECASE)

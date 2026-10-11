@@ -4,17 +4,17 @@ import json
 from collections import Counter
 from typing import TYPE_CHECKING
 
-from pataisa import __version__
-from pataisa.core.rules import CRITERIA, RULES, Remediability
-from pataisa.core.summary import count_by_rule
+from allymend import __version__
+from allymend.core.rules import CRITERIA, RULES, Remediability
+from allymend.core.summary import count_by_rule
 
 if TYPE_CHECKING:
     from pathlib import Path
 
     from pydantic.main import IncEx
 
-    from pataisa.core.models import FixPlan, PageResult, ScanResult
-    from pataisa.core.summary import RuleCount
+    from allymend.core.models import FixPlan, PageResult, ScanResult
+    from allymend.core.summary import RuleCount
 
 SCHEMA_VERSION = 1
 LIMITS_NOTE = (
@@ -46,7 +46,7 @@ def render_json(result: ScanResult, *, include_markup: bool = False) -> str:
     )
     document = {
         "schema_version": SCHEMA_VERSION,
-        "pataisa_version": __version__,
+        "allymend_version": __version__,
         **result.model_dump(mode="json", exclude=exclude),
     }
     return json.dumps(document, indent=2, ensure_ascii=False) + "\n"
@@ -85,7 +85,7 @@ def render_evidence(result: ScanResult, plan: FixPlan) -> str:
     """Render a checked fix plan as versioned JSON: the fixes, what was left, and the checks."""
     document = {
         "schema_version": SCHEMA_VERSION,
-        "pataisa_version": __version__,
+        "allymend_version": __version__,
         "axe_version": result.axe_version,
         **plan.model_dump(mode="json"),
     }
