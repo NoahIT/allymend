@@ -14,7 +14,7 @@ from typing import Any, override
 import anthropic
 import pytest
 
-from allymend.core.models import Slot, Value
+from allymend.core.models import Slot, TextKind, Value
 from allymend.errors import CannotFixError, ModelError
 from allymend.llm.claude import DEFAULT_MODEL, ClaudeValues
 
@@ -107,10 +107,10 @@ def slot(image: bytes | None = IMAGE, **context: str) -> Slot:
     )
 
 
-def link_slot() -> Slot:
+def link_slot(kind: TextKind = "link-name") -> Slot:
     return Slot(
-        kind="link-name",
-        rule_id="link-name",
+        kind=kind,
+        rule_id=kind,
         page="index.html",
         target=('a[href="cart.html"]',),
         html='<a href="cart.html">',
@@ -195,6 +195,35 @@ def test_answers_that_cannot_name_a_link_leave_it_for_a_person(
     api.body = body
     with pytest.raises(CannotFixError, match=f"^{re.escape(reason)}$"):
         claude(api).fill(link_slot())
+
+
+def test_buttons_get_their_own_instructions(api: Api) -> None:
+    answer = {"name": "Search", "unclear": False, "rationale": "A magnifying glass."}
+    api.body = message(json.dumps(answer))
+    assert claude(api).fill(link_slot("button-name")).text == "Search"
+    [(_, _, body)] = api.requests
+    assert body["system"].startswith("You name buttons on web pages")
+    assert body["output_config"]["format"]["schema"]["required"] == ["name", "unclear", "rationale"]
+    assert body["messages"][0]["content"][1]["text"].startswith("Name this button.\n")
+
+
+@pytest.mark.parametrize(
+    ("body", "reason"),
+    [
+        (
+            message(json.dumps({"name": "", "unclear": True, "rationale": "No clues."})),
+            "Claude couldn't tell what the button does; a person should name it",
+        ),
+        (message("", stop_reason="refusal"), "Claude declined to name this button"),
+    ],
+    ids=["unclear", "refusal"],
+)
+def test_answers_that_cannot_name_a_button_leave_it_for_a_person(
+    api: Api, body: Any, reason: str
+) -> None:
+    api.body = body
+    with pytest.raises(CannotFixError, match=f"^{re.escape(reason)}$"):
+        claude(api).fill(link_slot("button-name"))
 
 
 def test_returns_the_answer_with_the_model_that_wrote_it(api: Api) -> None:

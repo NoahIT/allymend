@@ -15,7 +15,7 @@ from allymend.core.models import (
     Value,
 )
 from allymend.errors import CannotFixError
-from allymend.fixers import FixOptions, plan_fixes, unified_diff
+from allymend.fixers import TEXT_RULES, FixOptions, plan_fixes, unified_diff
 
 PAGE = '<!doctype html>\n<html>\n<head><title>Shop</title></head>\n<body><img src="a.png">\n'
 FIXED = PAGE.replace("<html>", '<html lang="en">')
@@ -201,12 +201,68 @@ LINKS = (
     '<a href="mugs.html"><img src="mug.png" alt=""></a>\n'
     '<a href="shop.html"><img src="shop.png"></a>\n'
     '<a href="/" title="">Home</a>\n'
+    '<button class="search"><svg></svg></button>\n'
+    '<button class="close"><img src="close.png"></button>\n'
 )
 
 
 def link_problem(href: str) -> Occurrence:
     tag = f'<a href="{href}"'
     return problem("link-name", location(text=LINKS, tag=tag), target=f'a[href="{href}"]')
+
+
+def button_problem(name: str) -> Occurrence:
+    tag = f'<button class="{name}"'
+    return problem("button-name", location(text=LINKS, tag=tag), target=f"button.{name}")
+
+
+def test_lists_the_rules_whose_fixes_need_written_text() -> None:
+    assert frozenset({"image-alt", "link-name", "button-name"}) == TEXT_RULES
+
+
+def test_button_names_come_from_the_value_source(tmp_path: Path) -> None:
+    write(tmp_path, "index.html", LINKS)
+    writer = Writer("Search")
+
+    plan = plan_fixes(tmp_path, scan(button_problem("search")), FixOptions(values=writer))
+
+    [fix] = plan.fixes
+    position = LINKS.index('<button class="search"') + len("<button")
+    assert fix.edits == (
+        Edit(file="index.html", start=position, end=position, text=' aria-label="Search"'),
+    )
+    [slot] = writer.slots
+    assert (slot.kind, slot.rule_id, slot.max_length) == ("button-name", "button-name", 100)
+
+
+@pytest.mark.parametrize(
+    ("name", "writer", "reason"),
+    [
+        (
+            "search",
+            None,
+            "needs a button name from a person, or from a model (--text-from claude)",
+        ),
+        (
+            "close",
+            Writer("Close"),
+            "the image inside it will name the button once the image has alt text",
+        ),
+        (
+            "search",
+            Writer("Button for search"),
+            'the suggested button name starts with "button"',
+        ),
+    ],
+    ids=["no-writer", "image-without-alt", "redundant"],
+)
+def test_buttons_that_cannot_be_named_are_left_with_the_reason(
+    tmp_path: Path, name: str, writer: Writer | None, reason: str
+) -> None:
+    write(tmp_path, "index.html", LINKS)
+    plan = plan_fixes(tmp_path, scan(button_problem(name)), FixOptions(values=writer))
+    [left] = plan.unfixed
+    assert left.reason.startswith(reason)
 
 
 def test_link_names_need_someone_to_write_them(tmp_path: Path) -> None:

@@ -1,10 +1,10 @@
 # Threat model
 
-Version 1, 2026-10-11. Scanning, source mapping, fixes with browser checks, and alt text and link names from Claude are built; the rest describes the design. I'll update it as each part lands.
+Version 1, 2026-10-11. Scanning, source mapping, fixes with browser checks, and alt text and names for links and buttons from Claude are built; the rest describes the design. I'll update it as each part lands.
 
 ## What allymend does
 
-Allymend runs on a developer's machine or in their CI with that user's permissions. It serves a project's files to a headless browser, scans the pages, reads the source files, checks patched pages in the browser and produces reports and patch files. It can also scan pages by URL and, when asked, ask Claude for alt text and link names. Later versions add an MCP server for coding agents (see [data-flow.md](data-flow.md)).
+Allymend runs on a developer's machine or in their CI with that user's permissions. It serves a project's files to a headless browser, scans the pages, reads the source files, checks patched pages in the browser and produces reports and patch files. It can also scan pages by URL and, when asked, ask Claude for alt text and names for links and buttons. Later versions add an MCP server for coding agents (see [data-flow.md](data-flow.md)).
 
 ## What needs protecting
 
@@ -38,8 +38,8 @@ Allymend runs on a developer's machine or in their CI with that user's permissio
 | URL scan mode is used to reach internal services (SSRF). | Remote crawling blocks private, loopback and link-local addresses and cloud metadata endpoints, including after redirects. Local scans of `localhost` stay allowed because that's the main use. |
 | Secrets or page content end up in reports, logs or CI artifacts. | No page content is stored unless asked for. Authentication is held as a reference to a secret, never its value. Reports redact what they can. |
 | The HTML report runs script from a scanned page. | Everything taken from a page is escaped in the report, and the report sets a restrictive Content Security Policy. |
-| Page content is sent to a language model provider. | Off by default. Opt-in per run (`--text-from claude`), and `--show-payload` shows the exact requests without sending them. Each request holds one picture of an image or link and at most a few lines of text around it, each cut to 200 characters. Local models are planned. |
-| Text on a scanned page tries to steer the model, for example "ignore your instructions". | Page text is sent marked as data, and the instructions say to treat it as information only. The answer must match a fixed schema, is checked for length and form, escaped before it's inserted, verified in the browser, and listed for a person to read before the patch is applied. The worst outcome is poor alt text or a poor link name in a patch that someone reviews. |
+| Page content is sent to a language model provider. | Off by default. Opt-in per run (`--text-from claude`), and `--show-payload` shows the exact requests without sending them. Each request holds one picture of an image, link or button and at most a few lines of text around it, each cut to 200 characters. Local models are planned. |
+| Text on a scanned page tries to steer the model, for example "ignore your instructions". | Page text is sent marked as data, and the instructions say to treat it as information only. The answer must match a fixed schema, is checked for length and form, escaped before it's inserted, verified in the browser, and listed for a person to read before the patch is applied. The worst outcome is poor alt text or a poor name in a patch that someone reviews. |
 
 ## Supply chain
 

@@ -13,6 +13,9 @@ class Impact(StrEnum):
     CRITICAL = "critical"
 
 
+type TextKind = Literal["alt-text", "link-name", "button-name"]
+
+
 class _Model(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -123,7 +126,8 @@ class Slot(_Model):
     """Text a fix needs that a person or a model has to write.
 
     Attributes:
-        kind: What the text is for: ``alt-text`` for an image, or ``link-name`` for a link.
+        kind: What the text is for: ``alt-text`` for an image, ``link-name`` for a link, or
+            ``button-name`` for a button.
         rule_id: The axe-core rule the occurrence fails.
         page: The page it was found on.
         target: The occurrence's CSS selectors.
@@ -136,7 +140,7 @@ class Slot(_Model):
         max_length: The longest acceptable text.
     """
 
-    kind: Literal["alt-text", "link-name"]
+    kind: TextKind
     rule_id: str
     page: str
     target: tuple[str, ...]

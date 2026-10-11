@@ -10,7 +10,7 @@ flowchart LR
     project --> mapper[Source mapper]
     findings --> mapper
     mapper --> fixes[Planned fixes]
-    model[Claude, opt-in] -. alt text, link names .-> fixes
+    model[Claude, opt-in] -. alt text, names .-> fixes
     fixes --> browser
     fixes --> outputs[Report and patch file]
 ```
@@ -27,12 +27,12 @@ Allymend itself sends nothing over the network in this mode. The pages it loads 
 
 ## Text from Claude (opt-in)
 
-Only with `allymend fix --text-from claude`, and only for images and links whose source allymend can patch. Links whose only content is an image without alt text aren't sent: the image's alt text will name them.
+Only with `allymend fix --text-from claude`, and only for images, links and buttons whose source allymend can patch. Links and buttons whose only content is an image without alt text aren't sent: the image's alt text will name them.
 
-- **What is sent:** for an image, the image as the browser decoded it, scaled to at most 1568 pixels (or a screenshot when the page can't read the image back); for a link, a screenshot of it. With either, the text around it: the page title, the nearest heading, a caption, the link and its text, the file name and nearby text, each cut to 200 characters.
-- **Where to:** Anthropic's API, with the user's own credentials, one request per image or link.
+- **What is sent:** for an image, the image as the browser decoded it, scaled to at most 1568 pixels (or a screenshot when the page can't read the image back); for a link or button, a screenshot of it. With each, the text around it: the page title, the nearest heading, a caption, the link and its text, the file name and nearby text, each cut to 200 characters.
+- **Where to:** Anthropic's API, with the user's own credentials, one request per element.
 - **Seeing it first:** `--show-payload` prints every request and sends nothing.
-- **What comes back:** for an image, a short alt text and whether the image looks decorative; for a link, a short name and whether it was unclear where the link goes; with either, one sentence of reasoning. It is checked, escaped, verified in the browser and listed for a person to review.
+- **What comes back:** for an image, a short alt text and whether the image looks decorative; for a link or button, a short name and whether it was unclear what it's for; with each, one sentence of reasoning. It is checked, escaped, verified in the browser and listed for a person to review.
 
 ## What gets stored
 
@@ -47,7 +47,7 @@ Only with `allymend fix --text-from claude`, and only for images and links whose
 |---|---|---|
 | Installation | Python packages and a Chromium build | PyPI and Playwright's download servers |
 | URL scans | Requests to the pages given | Those pages only, with an identifying user agent |
-| `--text-from claude` | One image or link and its surrounding text per request | Anthropic's API |
+| `--text-from claude` | One image, link or button and its surrounding text per request | Anthropic's API |
 | Polite crawling (planned) | Requests to a whole site | That site, with a rate limit, robots.txt respected and a page cap |
 
 There's no telemetry.

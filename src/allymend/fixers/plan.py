@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING
 
 from justhtml import JustHTML
 
@@ -12,7 +12,7 @@ from allymend.files import read_source
 from allymend.fixers.alt_text import check_alt_text, fix_image_alt
 from allymend.fixers.edits import apply_edits, unified_diff
 from allymend.fixers.html_has_lang import check_language_tag, fix_html_has_lang
-from allymend.fixers.link_name import check_link_name, check_link_tag, fix_link_name
+from allymend.fixers.names import check_name, check_name_tag, fix_name
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping
@@ -20,12 +20,20 @@ if TYPE_CHECKING:
 
     from justhtml import QueryMatch
 
-    from allymend.core.models import Edit, Occurrence, ScanResult, SourceLocation, Value
+    from allymend.core.models import (
+        Edit,
+        Occurrence,
+        ScanResult,
+        SourceLocation,
+        TextKind,
+        Value,
+    )
     from allymend.files import SourceText
+    from allymend.fixers.names import Role
     from allymend.fixers.values import ValueSource
 
 _ALT_TEXT_LENGTH = 150
-_LINK_NAME_LENGTH = 100
+_NAME_LENGTH = 100
 
 
 @dataclass(frozen=True, slots=True)
@@ -117,23 +125,41 @@ def _image_alt(request: _Request) -> tuple[Edit, Value | None]:
     return edit, value.model_copy(update={"text": alt})
 
 
-def _link_name(request: _Request) -> tuple[Edit, Value | None]:
+@dataclass(frozen=True, slots=True)
+class _Control:
+    tag: str
+    role: Role
+    kind: TextKind
+
+
+_CONTROLS: Mapping[str, _Control] = MappingProxyType(
+    {
+        "link-name": _Control(tag="a", role="link", kind="link-name"),
+        "button-name": _Control(tag="button", role="button", kind="button-name"),
+    }
+)
+
+
+def _control_name(request: _Request) -> tuple[Edit, Value | None]:
+    control = _CONTROLS[request.occurrence.rule_id]
     images = request.element.query("img") if request.element is not None else []
     if any("alt" not in (image.attrs or {}) for image in images):
-        raise CannotFixError("the image inside it will name the link once the image has alt text")
-    check_link_tag(request.text, request.location)
+        raise CannotFixError(
+            f"the image inside it will name the {control.role} once the image has alt text"
+        )
+    check_name_tag(request.text, request.location, control.tag)
     if request.options.values is None:
         raise CannotFixError(
-            "needs a link name from a person, or from a model (--text-from claude)"
+            f"needs a {control.role} name from a person, or from a model (--text-from claude)"
         )
-    slot = _slot(request, "link-name", _LINK_NAME_LENGTH)
+    slot = _slot(request, control.kind, _NAME_LENGTH)
     value = request.options.values.fill(slot)
-    name = check_link_name(value.text, slot.max_length)
-    edit = fix_link_name(request.text, request.location, name)
+    name = check_name(value.text, slot.max_length, control.role)
+    edit = fix_name(request.text, request.location, control.tag, name)
     return edit, value.model_copy(update={"text": name})
 
 
-def _slot(request: _Request, kind: Literal["alt-text", "link-name"], max_length: int) -> Slot:
+def _slot(request: _Request, kind: TextKind, max_length: int) -> Slot:
     capture = request.capture or Capture()
     return Slot(
         kind=kind,
@@ -150,8 +176,14 @@ def _slot(request: _Request, kind: Literal["alt-text", "link-name"], max_length:
 
 
 _FIXERS: Mapping[str, Callable[[_Request], tuple[Edit, Value | None]]] = MappingProxyType(
-    {"html-has-lang": _page_language, "image-alt": _image_alt, "link-name": _link_name}
+    {
+        "html-has-lang": _page_language,
+        "image-alt": _image_alt,
+        **dict.fromkeys(_CONTROLS, _control_name),
+    }
 )
+
+TEXT_RULES = frozenset({"image-alt", *_CONTROLS})
 
 
 @dataclass(frozen=True, slots=True)

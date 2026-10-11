@@ -67,12 +67,16 @@ def test_lists_text_written_by_a_model() -> None:
     link = alt.model_copy(
         update={"rule_id": "link-name", "value": value.model_copy(update={"text": "Cart"})}
     )
-    plan = FixPlan(fixes=(fix("index.html"), alt, link), unfixed=(), changes=())
+    button = alt.model_copy(
+        update={"rule_id": "button-name", "value": value.model_copy(update={"text": "Search"})}
+    )
+    plan = FixPlan(fixes=(fix("index.html"), alt, link, button), unfixed=(), changes=())
     assert render_fix_summary(result(), plan, PATCH).splitlines()[2:] == [
         "",
         "Text written by a model; read each one before applying the patch:",
         '  shop.html: alt text "A blue mug" (claude-opus-5-5)',
         '  shop.html: link name "Cart" (claude-opus-5-5)',
+        '  shop.html: button name "Search" (claude-opus-5-5)',
     ]
 
 

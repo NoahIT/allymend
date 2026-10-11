@@ -98,7 +98,7 @@ def test_alt_text_from_claude_is_checked_and_listed_for_review(
     ]
 
 
-def test_links_are_named_by_claude_or_by_their_image(
+def test_links_and_buttons_are_named_by_claude_or_by_their_image(
     tmp_path: Path,
     write_page: Callable[..., Path],
     monkeypatch: pytest.MonkeyPatch,
@@ -108,23 +108,28 @@ def test_links_are_named_by_claude_or_by_their_image(
     write_page(
         "links/index.html",
         '<a href="cart.html"><svg width="24" height="24"></svg></a> '
-        '<a href="shop.html"><img src="mug.png"></a>',
+        '<a href="shop.html"><img src="mug.png"></a> '
+        '<button type="button"><svg width="24" height="24"></svg></button>',
     )
     monkeypatch.chdir(tmp_path)
 
     assert main(["fix", "links", "--text-from", "claude"]) == EXIT_PROBLEMS
 
     lines = capsys.readouterr().out.splitlines()
-    assert lines[0].startswith("Wrote fixes for 2 problems in 1 file to allymend.patch.")
+    assert lines[0].startswith("Wrote fixes for 3 problems in 1 file to allymend.patch.")
     assert '  index.html: alt text "A blue mug" (claude-opus-5-5)' in lines
     assert '  index.html: link name "Your cart" (claude-opus-5-5)' in lines
+    assert '  index.html: button name "Your cart" (claude-opus-5-5)' in lines
     gone = lines.index("Also gone once these fixes were applied (1 problem):")
     assert lines[gone + 1] == "  index.html: Link has no name (link-name), 1 element"
     patch = Path("allymend.patch").read_text(encoding="utf-8")
     assert '<a aria-label="Your cart" href="cart.html">' in patch
     assert '<img alt="A blue mug" src="mug.png">' in patch
+    assert '<button aria-label="Your cart" type="button">' in patch
     systems = sorted(request["system"].split("\n")[0] for request in claude_requests)
     assert systems == [
+        "You name buttons on web pages, for people who use screen readers or control their "
+        "computer by voice.",
         "You name links on web pages, for people who use screen readers or control their "
         "computer by voice.",
         "You write alternative text for images on web pages, for people who use screen readers.",

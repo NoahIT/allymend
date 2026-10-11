@@ -25,7 +25,7 @@ from allymend.errors import (
     NotAFolderError,
     UnknownTargetError,
 )
-from allymend.fixers import FixOptions, check_language_tag, plan_fixes
+from allymend.fixers import TEXT_RULES, FixOptions, check_language_tag, plan_fixes
 from allymend.mapper import map_sources
 from allymend.scanner import ScanOptions, capture_elements, scan_directory, scan_urls
 from allymend.verifier import verify_fixes
@@ -86,11 +86,7 @@ def _run_fix(args: argparse.Namespace, options: ScanOptions) -> int:
     prefix = _patch_prefix(root)
     writer = _text_writer(args)
     result = map_sources(root, scan_directory(root, options))
-    captures = (
-        {}
-        if writer is None
-        else capture_elements(root, result, {"image-alt", "link-name"}, options)
-    )
+    captures = {} if writer is None else capture_elements(root, result, TEXT_RULES, options)
     if writer is not None and args.show_payload:
         preview = _Preview()
         fix_options = FixOptions(language=args.lang, values=preview)
