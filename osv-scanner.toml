@@ -1,0 +1,4 @@
+[[IgnoredVulns]]
+id = "GHSA-vxj4-q4g9-crj7"
+ignoreUntil = 2026-10-27T00:00:00Z
+reason = "Fixed in virtualenv 21.14.7, released 2026-10-12, which the 14-day release-age rule allows from 2026-10-26. virtualenv is a development dependency of pre-commit, and the bug needs an environment name crafted by an attacker."
